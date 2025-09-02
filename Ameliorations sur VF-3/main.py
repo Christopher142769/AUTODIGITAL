@@ -466,15 +466,18 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
 
 if __name__ == "__main__":
     import uvicorn
-    
+    import os
+
+    port = int(os.environ.get("PORT", 8000))  # prend le port fourni par Render
+
     logger.info("🚀 Démarrage d'Assistant Dux Web...")
     logger.info("📁 Répertoire d'upload: %s", UPLOAD_DIR.absolute())
-    logger.info("🌐 Interface web: http://127.0.0.1:8000")
-    logger.info("📖 Documentation API: http://127.0.0.1:8000/docs")
+    logger.info("🌐 Interface web: http://127.0.0.1:%s" % port)
+    logger.info("📖 Documentation API: http://127.0.0.1:%s/docs" % port)
     
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
+        host="0.0.0.0",   # obligatoire pour exposer le service
+        port=port,
+        reload=True       # tu peux le laisser pour le dev
     )
