@@ -1,0 +1,204 @@
+/* Container ultra dark */
+.auth-container {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #050505; /* Noir quasi absolu */
+  overflow: hidden;
+}
+
+/* Effet néon animé en arrière-plan (vagues qui bougent) */
+.neon-bg {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.2), transparent 40%),
+              radial-gradient(circle at 80% 80%, rgba(255, 0, 200, 0.15), transparent 40%),
+              radial-gradient(circle at 60% 30%, rgba(150, 0, 255, 0.2), transparent 40%);
+  animation: backgroundMove 20s ease-in-out infinite alternate;
+  filter: blur(120px);
+  z-index: 0;
+}
+@keyframes backgroundMove {
+  0% { transform: translate(-10%, -10%) scale(1); }
+  100% { transform: translate(10%, 10%) scale(1.2); }
+}
+
+/* Particules néon flottantes */
+.auth-container::before,
+.auth-container::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #0ff;
+  border-radius: 50%;
+  animation: stars 10s linear infinite;
+  box-shadow: 
+    200px 100px #0ff,
+    400px 300px #ff00c8,
+    600px 500px #7700ff,
+    800px 200px #0ff,
+    1000px 400px #ff00c8,
+    1200px 250px #7700ff;
+}
+.auth-container::after {
+  animation-duration: 15s;
+}
+@keyframes stars {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-2000px); opacity: 0; }
+}
+
+/* Carte sombre futuriste */
+.auth-card {
+  position: relative;
+  z-index: 1;
+  background: rgba(10, 10, 20, 0.95);
+  border: 2px solid rgba(0, 255, 255, 0.15);
+  padding: 2.5rem;
+  border-radius: 20px;
+  box-shadow: 0 0 40px rgba(0, 255, 255, 0.4),
+              0 0 80px rgba(255, 0, 200, 0.2);
+  width: 100%;
+  max-width: 420px;
+  backdrop-filter: blur(14px);
+}
+
+/* Flottement 3D */
+.animate-float {
+  animation: floaty 8s ease-in-out infinite;
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0px) rotateY(0deg); }
+  50% { transform: translateY(-15px) rotateY(5deg); }
+}
+
+/* Titre glow cyberpunk */
+.title-glow {
+  text-align: center;
+  font-size: 2.2rem;
+  margin-bottom: 2rem;
+  color: #00f5ff;
+  text-shadow: 0 0 20px #00f5ff, 0 0 40px #ff00c8, 0 0 80px #7700ff;
+  font-weight: 900;
+  letter-spacing: 3px;
+  font-family: "Orbitron", sans-serif;
+}
+
+/* Champs */
+.form-group {
+  margin-bottom: 1.8rem;
+  display: flex;
+  flex-direction: column;
+}
+.form-group label {
+  margin-bottom: 0.5rem;
+  color: #aaa;
+  font-size: 0.95rem;
+}
+.input-glow {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid rgba(0, 255, 255, 0.4);
+  padding: 0.9rem;
+  border-radius: 14px;
+  color: #fff;
+  outline: none;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+.input-glow:focus {
+  border-color: #ff00c8;
+  box-shadow: 0 0 20px #ff00c8, 0 0 40px #00f5ff;
+  background: rgba(20, 20, 30, 0.95);
+}
+
+/* Bouton néon animé */
+.btn-futuristic {
+  width: 100%;
+  padding: 1rem;
+  background: linear-gradient(135deg, #00f5ff, #ff00c8, #7700ff);
+  border: none;
+  border-radius: 50px;
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+.btn-futuristic::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 220%;
+  height: 220%;
+  background: conic-gradient(from 0deg, transparent, rgba(255,255,255,0.4), transparent);
+  animation: rotate 4s linear infinite;
+}
+.btn-futuristic:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 0 60px rgba(255, 0, 200, 1), 0 0 90px rgba(0, 255, 255, 1);
+}
+
+/* Messages d'erreur */
+.error-message {
+  background: rgba(255, 0, 50, 0.1);
+  border: 1px solid #ff0044;
+  color: #ff3355;
+  padding: 0.7rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff0044;
+}
+
+/* Lien inscription néon */
+.auth-link {
+  text-align: center;
+  margin-top: 1.5rem;
+  color: #777;
+  font-size: 0.95rem;
+}
+.auth-link a {
+  color: #00f5ff;
+  text-decoration: none;
+  font-weight: bold;
+  text-transform: uppercase;
+  transition: 0.3s;
+}
+.auth-link a:hover {
+  color: #ff00c8;
+  text-shadow: 0 0 20px #ff00c8, 0 0 40px #00f5ff;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .auth-card {
+    width: 90%;
+    padding: 1.8rem;
+  }
+  .title-glow {
+    font-size: 1.7rem;
+  }
+}
+/* Message de succès futuriste */
+.success-message {
+  background: rgba(0, 255, 100, 0.15);
+  border: 1px solid #00ff99;
+  color: #00ffcc;
+  padding: 0.7rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ffaa, 0 0 20px #00f5ff;
+}
