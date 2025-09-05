@@ -8,12 +8,15 @@ import {
   FaCog,
   FaSignOutAlt,
   FaTimes,
-  FaBars
+  FaBars,
+  FaBell,
+  FaCheck
 } from 'react-icons/fa';
 import './AdminDashboard.css';
 
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -22,6 +25,7 @@ const AdminDashboard = ({ setAuthToken }) => {
 
   useEffect(() => {
     fetchUsers();
+    fetchNotifications();
   }, []);
 
   // Gère l'état de la sidebar en fonction de la taille de l'écran
@@ -48,84 +52,109 @@ const AdminDashboard = ({ setAuthToken }) => {
     }
   };
 
-  const handleGrantSubscription = async (username, months) => {
-    setIsLoading(true);
-    setError(null);
+  const fetchNotifications = async () => {
     try {
-      await axios.post('https://autodigital.onrender.com/admin/update-subscription', { username, months });
-      alert(`Abonnement de ${months} mois accordé à ${username}!`);
-      setSelectedUser(null);
-      fetchUsers();
+      const response = await axios.get('https://autodigital.onrender.com/admin/notifications');
+      setNotifications(response.data.notifications);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Erreur lors de l\'attribution de l\'abonnement.');
-    } finally {
-      setIsLoading(false);
+      console.error('Erreur lors de la récupération des notifications:', err);
+      // Gérer l'erreur mais ne pas la bloquer
     }
   };
-  
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    setAuthToken(null);
-    navigate('/');
+
+  const handleGrantSubscription = async (username, months) => {
+    try {
+      await axios.post('https://autodigital.onrender.com/admin/grant-subscription', {
+        username,
+        months
+      });
+      alert(`Abonnement de ${months} mois accordé à ${username} avec succès.`);
+      fetchUsers(); // Rafraîchir la liste des utilisateurs
+      setSelectedUser(null);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de l\'attribution de l\'abonnement.');
+    }
   };
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
+  const handleProcessNotification = async (notificationId, username, months) => {
+    try {
+      // 1. Accorder l'abonnement à l'utilisateur
+      await handleGrantSubscription(username, months);
+
+      // 2. Supprimer la notification
+      await axios.delete(`https://autodigital.onrender.com/admin/notifications/${notificationId}`);
+      
+      // 3. Rafraîchir les notifications
+      fetchNotifications();
+    } catch (err) {
+      console.error('Erreur lors du traitement de la notification:', err);
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthToken(null);
+    localStorage.removeItem('authToken');
+    navigate('/login');
   };
 
   return (
-    <div className="admin-container">
-      {/* Bouton de bascule mobile */}
-      <button className="toggle-btn" onClick={toggleSidebar}>
-        {isSidebarOpen ? <FaTimes /> : <FaBars />}
-      </button>
-
+    <div className={`admin-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
       {/* Sidebar */}
-      <div className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+      <aside className="sidebar">
         <div className="sidebar-header">
-          <h2 className="logo neon-text">⚡ DUXAI ⚡</h2>
+          <h2 className="logo">Admin Dashboard</h2>
+          <button className="close-btn" onClick={() => setIsSidebarOpen(false)}>&times;</button>
         </div>
-        <ul className="sidebar-menu">
-          <li className="menu-item active">
-            <FaUsers />
-            <span>Utilisateurs</span>
-          </li>
-          <li className="menu-item">
-            <FaChartLine />
-            <span>Statistiques</span>
-          </li>
-          <li className="menu-item">
-            <FaCog />
-            <span>Paramètres</span>
-          </li>
-          <li className="menu-item logout" onClick={handleLogout}>
-            <FaSignOutAlt />
-            <span>Déconnexion</span>
-          </li>
-        </ul>
-        <div className="sidebar-footer">
-          <p>&copy; 2025 DuxAI</p>
-        </div>
-      </div>
+        <nav className="nav-menu">
+          <a href="#" className="nav-item active"><FaUsers /> Utilisateurs</a>
+          <a href="#" className="nav-item"><FaChartLine /> Statistiques</a>
+          <a href="#" className="nav-item"><FaBell /> Notifications</a>
+          <a href="#" className="nav-item"><FaCog /> Paramètres</a>
+          <button onClick={handleLogout} className="nav-item"><FaSignOutAlt /> Déconnexion</button>
+        </nav>
+      </aside>
 
-      {/* Main Content */}
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <h1 className="neon-title">🚀 Tableau de bord Administrateur</h1>
+      {/* Main content */}
+      <main className="main-content">
+        <header className="main-header">
+          <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}><FaBars /></button>
+          <h1>Tableau de bord</h1>
         </header>
+
+        {error && <div className="alert-error">{error}</div>}
+        {isLoading && <div className="loading-spinner"></div>}
+
+        {/* Section Notifications */}
+        <div className="dashboard-section notifications-section">
+          <h2><FaBell /> Notifications de paiement</h2>
+          {notifications.length > 0 ? (
+            <div className="notifications-list">
+              {notifications.map(notification => (
+                <div key={notification.id} className="notification-item">
+                  <span className="notification-text">
+                    <span className="user-text">{notification.username}</span> a payé pour un abonnement de <span className="months-text">{notification.subscription_months} mois</span>.
+                  </span>
+                  <button className="process-btn" onClick={() => handleProcessNotification(notification.id, notification.username, notification.subscription_months)}>
+                    <FaCheck /> Accorder
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="no-notifications">Aucune notification en attente.</p>
+          )}
+        </div>
         
-        {isLoading && <p className="loading-message">Chargement des données...</p>}
-        {error && <p className="error-message">{error}</p>}
-        
-        <div className="card user-list-card">
-          <h2 className="neon-subtitle">👥 Liste des Utilisateurs</h2>
+        {/* Section Utilisateurs */}
+        <div className="dashboard-section">
+          <h2><FaUsers /> Utilisateurs</h2>
           <table className="user-table">
             <thead>
               <tr>
                 <th>Nom d'utilisateur</th>
                 <th>Rôle</th>
-                <th>Essais Restants</th>
-                <th>Abonnement</th>
+                <th>Essais restants</th>
+                <th>Abonnement (fin)</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -133,8 +162,8 @@ const AdminDashboard = ({ setAuthToken }) => {
               {users.map(user => (
                 <tr key={user.username}>
                   <td data-label="Nom d'utilisateur">{user.username}</td>
-                  <td data-label="Rôle"><span className={`role-badge ${user.role}`}>{user.role}</span></td>
-                  <td data-label="Essais Restants">{user.trials_left === -1 ? 'Illimité' : user.trials_left}</td>
+                  <td data-label="Rôle" className={user.role === 'admin' ? 'admin-role' : ''}>{user.role}</td>
+                  <td data-label="Essais restants">{user.trials_left}</td>
                   <td data-label="Abonnement">{user.subscription_end ? new Date(user.subscription_end).toLocaleDateString() : 'Aucun'}</td>
                   <td data-label="Actions">
                     {user.role === 'user' && (
