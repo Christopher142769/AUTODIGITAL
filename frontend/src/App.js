@@ -1,9 +1,7 @@
-// --- App.js ---
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import './App.css';
-import { FaTimes, FaCheckCircle } from 'react-icons/fa';
 
 function App({ authToken, setAuthToken }) {
   const [userQuery, setUserQuery] = useState('');
@@ -12,13 +10,11 @@ function App({ authToken, setAuthToken }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false); // Nouveau state pour la modale de paiement
   const [modificationQuery, setModificationQuery] = useState('');
   const [files, setFiles] = useState([]);
   const [trialsLeft, setTrialsLeft] = useState(3);
   const [username, setUsername] = useState('');
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [paymentMessage, setPaymentMessage] = useState('');
 
   const iframeRef = useRef(null);
   const navigate = useNavigate();
@@ -44,228 +40,290 @@ function App({ authToken, setAuthToken }) {
 
   const fetchFiles = async () => {
     try {
-      const response = await axios.get('https://autodigital.onrender.com/user/files');
-      setFiles(response.data.files);
+      const response = await axios.get('https://autodigital.onrender.com/list-files');
+      if (response.data.success) {
+        setFiles(response.data.files);
+      }
     } catch (err) {
-      console.error('Erreur de récupération des fichiers:', err);
-      handleLogout();
+      console.error('Erreur lors de la récupération des fichiers:', err);
+      setError("Impossible de lister les fichiers. Le backend est-il en cours d'exécution ?");
     }
   };
 
   const handleLogout = () => {
-    setAuthToken(null);
     localStorage.removeItem('authToken');
-    navigate('/login');
+    setAuthToken(null);
+    navigate('/');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const renderCodeInIframe = (code) => {
+    setTimeout(() => {
+      if (iframeRef.current) {
+        iframeRef.current.contentDocument.open();
+        iframeRef.current.contentDocument.write(code);
+        iframeRef.current.contentDocument.close();
+      }
+    }, 50);
+  };
+
+  const handleSubmit = async (queryToUse, fileToUse) => {
+    if (trialsLeft === 0) {
+      setIsPaymentModalOpen(true); // Ouvre la nouvelle modale de paiement
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    setGeneratedCode('');
+
     try {
       const response = await axios.post('https://autodigital.onrender.com/generate', {
-        user_query: userQuery,
-        file_name: fileName
-      });
-      setGeneratedCode(response.data.code);
-      setTrialsLeft(response.data.trials_left);
-      setIsModalOpen(true);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Une erreur est survenue lors de la génération du code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleModification = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setGeneratedCode('');
-    try {
-      const response = await axios.post('https://autodigital.onrender.com/modify', {
-        modification_query: modificationQuery,
-        file_content: generatedCode
-      });
-      setGeneratedCode(response.data.code);
-      setTrialsLeft(response.data.trials_left);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Une erreur est survenue lors de la modification du code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setIsLoading(true);
-    try {
-      await axios.post('https://autodigital.onrender.com/save', {
-        file_name: fileName,
-        file_content: generatedCode
-      });
-      alert('Fichier sauvegardé avec succès !');
-      setIsModalOpen(false);
-      fetchFiles();
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la sauvegarde du fichier.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLoadFile = async (selectedFileName) => {
-    setIsLoading(true);
-    setFileName(selectedFileName);
-    setIsModalOpen(false);
-    try {
-      const response = await axios.get(`https://autodigital.onrender.com/user/file/${selectedFileName}`);
-      setGeneratedCode(response.data.file_content);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Erreur lors du chargement du fichier.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleOpenSubscriptionModal = () => {
-    setIsSubscriptionModalOpen(true);
-  };
-
-  const handleCloseSubscriptionModal = () => {
-    setIsSubscriptionModalOpen(false);
-    setPaymentMessage('');
-    setPaymentSuccess(false);
-  };
-
-  const handleSubscribe = async (subscriptionMonths) => {
-    setIsLoading(true);
-    setPaymentMessage('Traitement du paiement...');
-    setPaymentSuccess(false);
-    
-    try {
-      // TODO: Intégrer l'API Paydunya ici
-      // Pour l'instant, nous simulons le paiement en envoyant une requête au backend
-      const response = await axios.post('https://autodigital.onrender.com/subscribe', {
-        username: username,
-        subscription_months: subscriptionMonths,
-        // Champs Paydunya simulés
-        amount: subscriptionMonths * 10,
-        currency: "XOF"
+        file_path: fileToUse,
+        user_query: queryToUse,
       });
 
-      if (response.status === 200) {
-        setPaymentMessage('Paiement réussi ! Votre demande d\'abonnement a été envoyée à l\'administrateur.');
-        setPaymentSuccess(true);
+      if (response.data.status === 'success') {
+        const newCode = response.data.code;
+        setGeneratedCode(newCode);
+        setFileName(fileToUse);
+        setTrialsLeft(response.data.trials_left);
+        renderCodeInIframe(newCode);
+        fetchFiles();
+        if (isModalOpen) setIsModalOpen(false);
       } else {
-        setPaymentMessage('Échec du paiement. Veuillez réessayer.');
-        setPaymentSuccess(false);
+        setError(response.data.message);
       }
     } catch (err) {
-      console.error('Erreur lors de la souscription:', err);
-      setPaymentMessage(err.response?.data?.detail || 'Une erreur est survenue lors du paiement.');
-      setPaymentSuccess(false);
+      setError(err.response?.data?.detail || "Erreur de communication avec le backend. Assurez-vous qu'il est en cours d'exécution.");
+      console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Nouvelle fonction pour gérer le paiement d'abonnement
+  const handleSubscriptionPayment = async (plan, amount) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await axios.post('https://autodigital.onrender.com/create-payment-invoice', {
+        plan,
+        amount,
+        callback_url: 'https://autodigital.onrender.com/payment-callback',
+        return_url: window.location.href,
+      });
+
+      if (response.data.success) {
+        window.location.href = response.data.invoice_url; // Redirige vers la page de paiement PayDunya
+      } else {
+        setError('Erreur lors de la création de la facture de paiement.');
+      }
+    } catch (err) {
+      setError('Erreur de communication avec le serveur de paiement.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInitialSubmit = (e) => {
+    e.preventDefault();
+    handleSubmit(userQuery, fileName);
+  };
+
+  const handleModifySubmit = (e) => {
+    e.preventDefault();
+    handleSubmit(modificationQuery, fileName);
+  };
+
+  const handleCardClick = async (file) => {
+    setIsLoading(true);
+    setError(null);
+    setFileName(file.name);
+
+    try {
+      const response = await axios.get(`https://autodigital.onrender.com/get-file-content?file_path=${file.name}`);
+      const fileContent = response.data.content;
+      setGeneratedCode(fileContent);
+      renderCodeInIframe(fileContent);
+    } catch (err) {
+      setError('Impossible de récupérer le contenu du fichier. Vérifiez le backend.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePreview = () => {
+    if (generatedCode) {
+      const blob = new Blob([generatedCode], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
     }
   };
 
   return (
-    <div className="app-container">
-      {/* Sidebar de gauche */}
-      <div className="sidebar left-sidebar">
-        <h1 className="logo">
-          AutoDigital
-          <span className="cursor">|</span>
-        </h1>
-        <p className="description">
-          Assistant IA pour créer, modifier et générer votre site web.
-        </p>
-        <p className="user-info">
-          Bienvenue, <span className="neon-text">{username}</span>!
-          <br />
-          Essais restants : <span className="neon-text">{trialsLeft}</span>
-        </p>
-
-        <form onSubmit={handleSubmit} className="form-container">
-          <div className="form-group floating">
-            <input
-              id="fileName"
-              type="text"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="index.html, style.css, script.js"
-              required
-            />
-            <label htmlFor="fileName">Nom du fichier</label>
-          </div>
-          <div className="form-group floating">
-            <textarea
-              id="userQuery"
-              value={userQuery}
-              onChange={(e) => setUserQuery(e.target.value)}
-              placeholder="Crée une page d'accueil avec un fond bleu et un bouton 'Commencer'."
-              rows="4"
-              required
-            ></textarea>
-            <label htmlFor="userQuery">Décrivez ce que vous voulez générer</label>
-          </div>
-          <button type="submit" className="btn btn-primary w-100" disabled={isLoading}>
-            {isLoading ? 'Génération en cours…' : 'Générer le code'}
-          </button>
-        </form>
-
-        <div className="file-list-section">
-          <h2>Vos fichiers</h2>
-          <div className="file-list">
-            {files.length > 0 ? (
-              files.map(file => (
-                <div key={file.id} className="file-item" onClick={() => handleLoadFile(file.file_name)}>
-                  {file.file_name}
-                </div>
-              ))
-            ) : (
-              <p>Aucun fichier trouvé.</p>
-            )}
-          </div>
-        </div>
-
-        <button className="btn btn-secondary w-100 mt-auto" onClick={handleLogout}>
-          Déconnexion
-        </button>
+    <div className="App ui-root">
+      {/* Background FX */}
+      <div className="bg-grid" aria-hidden></div>
+      <div className="bg-blobs" aria-hidden>
+        <span></span><span></span><span></span><span></span>
       </div>
 
-      {/* Main content */}
-      <div className="main-content">
-        <div className="code-viewer">
-          {error && <div className="alert alert-danger">{error}</div>}
-          {generatedCode ? (
-            <iframe
-              ref={iframeRef}
-              title="Code Preview"
-              srcDoc={generatedCode}
-              sandbox="allow-scripts allow-forms allow-same-origin"
-              className="code-preview"
-            ></iframe>
-          ) : (
-            <div className="placeholder">
-              Votre aperçu de code s'affichera ici.
+      {/* Top nav / brand */}
+      <header className="brand-header glass-card">
+        <div className="brand-left">
+          <div className="brand-logo neon">AUTODIGITAL</div>
+          <p className="brand-subtitle">Expert · Générateur de sites web</p>
+        </div>
+        <div className="brand-right">
+          <div className="user-pill">
+            <span className="dot" /> {username || 'Utilisateur'}
+          </div>
+          <button onClick={handleLogout} className="btn btn-ghost">Déconnexion</button>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="main-content">
+        <section className="hero glass-card">
+          <div className="hero-copy">
+            <h1 className="hero-title">Créez. Modifiez. Déployez.</h1>
+            <p className="hero-desc">Une plateforme propulsée par l’IA pour générer des templates superbes en un instant.
+              Animations fluides, design futuriste, responsive total.</p>
+          </div>
+          <div className="hero-stats">
+            <div className="stat">
+              <span className="stat-label">Essais restants</span>
+              <span className="stat-value">
+                {trialsLeft === -1 ? 'Illimité' : `${trialsLeft} / 3`}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Projets</span>
+              <span className="stat-value">{files.length}</span>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid-container">
+          {/* Generate new site */}
+          <section className="card form-card glass-card hover-lift">
+            <h2 className="card-title">Générer un nouveau site</h2>
+            <form onSubmit={handleInitialSubmit} className="smart-form">
+              <div className="form-group floating">
+                <input
+                  id="fileName"
+                  type="text"
+                  value={fileName}
+                  onChange={(e) => setFileName(e.target.value)}
+                  required
+                  placeholder=" "
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group floating">
+                <textarea
+                  id="userQuery"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Crée un site web simple pour un café. Ajoute une section 'À propos' et un formulaire de contact."
+                  rows="5"
+                  required
+                ></textarea>
+              </div>
+
+              <button type="submit" className="btn btn-primary w-100" disabled={isLoading}>
+                {isLoading ? 'Génération en cours…' : 'Générer le Template'}
+              </button>
+            </form>
+          </section>
+
+          {/* Error toast */}
+          {error && (
+            <div className="toast error glass-card" role="alert">
+              <div className="toast-dot" /><span>{error}</span>
+              <button className="btn btn-ghost sm" onClick={() => setError(null)}>OK</button>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Modal de modification/sauvegarde */}
-      {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Modifier & Sauvegarder</h3>
-              <button className="close-button" onClick={() => setIsModalOpen(false)}>&times;</button>
+          {/* Files list */}
+          <section className="card file-list-card glass-card">
+            <div className="card-head">
+              <h2 className="card-title">Sites web existants</h2>
+              {files.length === 0 && <p className="muted">Aucun site trouvé. Générez-en un !</p>}
             </div>
-            {trialsLeft > 0 ? (
-              <form onSubmit={handleModification} className="modal-body">
-                <p>Modifiez votre code en utilisant l'IA. Essais restants : {trialsLeft}</p>
+
+            <div className="files-grid">
+              {files.map((file) => (
+                <article key={file.name} className="file-card hover-lift" onClick={() => handleCardClick(file)}>
+                  <header className="file-card-head">
+                    <h3 className="file-title">{file.name}</h3>
+                  </header>
+
+                  <div className="card-preview-container">
+                    <iframe
+                      src={`http://127.0.0.1:8000/files/${username}/${file.name}`}
+                      title={file.name}
+                      className="card-preview-iframe"
+                      sandbox="allow-scripts allow-same-origin"
+                    ></iframe>
+                  </div>
+
+                  <footer className="card-actions">
+                    <button
+                      className="btn btn-secondary"
+                      onClick={(e) => { e.stopPropagation(); setFileName(file.name); setIsModalOpen(true); }}
+                    >Modifier</button>
+
+                    <a
+                      href={`http://127.00.1:8000/files/${username}/${file.name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button className="btn btn-ghost">Aperçu</button>
+                    </a>
+                  </footer>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          {/* Live preview */}
+          {generatedCode && (
+            <section className="card preview-card glass-card">
+              <div className="card-head">
+                <h2 className="card-title">Prévisualisation du code généré</h2>
+                <div className="actions">
+                  <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>Modifier</button>
+                  <button className="btn btn-outline" onClick={handlePreview}>Grand écran</button>
+                </div>
+              </div>
+
+              <div className="preview-container">
+                <iframe
+                  ref={iframeRef}
+                  title="Code Preview"
+                  className="code-preview-iframe"
+                  sandbox="allow-scripts allow-same-origin"
+                ></iframe>
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
+
+      {/* Modal de modification de site */}
+      {isModalOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-content glass-card">
+            <div className="modal-header">
+              <h3 className="modal-title">Modifier le site web</h3>
+              <button className="close-button" onClick={() => setIsModalOpen(false)} aria-label="Fermer">&times;</button>
+            </div>
+            {trialsLeft !== 0 ? (
+              <form onSubmit={handleModifySubmit} className="smart-form">
                 <div className="form-group floating">
                   <textarea
                     id="modificationQuery"
@@ -282,47 +340,49 @@ function App({ authToken, setAuthToken }) {
                 </button>
               </form>
             ) : (
+              // Contenu de la modale de modification si les essais sont à 0 (sera remplacé par la modale de paiement)
               <div className="modal-body">
                 <p>Vous avez utilisé vos 3 essais de génération. Veuillez passer à l'option premium pour continuer.</p>
-                <button className="btn btn-gradient w-100" onClick={handleOpenSubscriptionModal}>Passer à l'option Premium</button>
+                <button className="btn btn-gradient w-100" onClick={() => { setIsModalOpen(false); setIsPaymentModalOpen(true); }}>Passer à l'option Premium</button>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Modal d'abonnement */}
-      {isSubscriptionModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+      {/* Nouvelle modale de paiement */}
+      {isPaymentModalOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-content glass-card">
             <div className="modal-header">
-              <h3>Choisissez votre plan</h3>
-              <button className="close-button" onClick={handleCloseSubscriptionModal}>&times;</button>
+              <h3 className="modal-title">Choisir un abonnement</h3>
+              <button className="close-button" onClick={() => setIsPaymentModalOpen(false)}>&times;</button>
             </div>
-            <div className="modal-body subscription-modal-body">
-              <p>Sélectionnez un plan pour débloquer des générations illimitées.</p>
-              {paymentMessage && (
-                <div className={`payment-message ${paymentSuccess ? 'success' : 'error'}`}>
-                  {paymentSuccess ? <FaCheckCircle /> : <FaTimes />}
-                  <p>{paymentMessage}</p>
-                </div>
-              )}
-              <div className="subscription-options-grid">
-                <div className="plan-card">
-                  <h4 className="plan-title">Abonnement Mensuel</h4>
-                  <p className="plan-price">5000 XOF/mois</p>
-                  <button className="btn btn-plan w-100" onClick={() => handleSubscribe(1)}>Acheter (1 mois)</button>
-                </div>
-                <div className="plan-card">
-                  <h4 className="plan-title">Abonnement Trimestriel</h4>
-                  <p className="plan-price">12000 XOF/trimestre</p>
-                  <button className="btn btn-plan w-100" onClick={() => handleSubscribe(3)}>Acheter (3 mois)</button>
-                </div>
-                <div className="plan-card">
-                  <h4 className="plan-title">Abonnement Annuel</h4>
-                  <p className="plan-price">48000 XOF/an</p>
-                  <button className="btn btn-plan w-100" onClick={() => handleSubscribe(12)}>Acheter (12 mois)</button>
-                </div>
+            <div className="modal-body payment-options">
+              <p>Vous avez utilisé vos 3 essais. Choisissez un abonnement pour continuer à générer des sites web.</p>
+              
+              <div className="subscription-card">
+                <h4>Abonnement 1 mois</h4>
+                <p>Accès illimité aux fonctionnalités de génération de site.</p>
+                <span className="price">9.99 €</span>
+                <button
+                  className="btn btn-primary w-100"
+                  onClick={() => handleSubscriptionPayment('1_month', 9.99)}
+                >
+                  Payer avec PayDunya
+                </button>
+              </div>
+              
+              <div className="subscription-card">
+                <h4>Abonnement 6 mois</h4>
+                <p>Économisez 20% en choisissant le plan 6 mois.</p>
+                <span className="price">47.99 €</span>
+                <button
+                  className="btn btn-primary w-100"
+                  onClick={() => handleSubscriptionPayment('6_months', 47.99)}
+                >
+                  Payer avec PayDunya
+                </button>
               </div>
             </div>
           </div>
