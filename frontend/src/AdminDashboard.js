@@ -18,17 +18,18 @@ import './AdminDashboard.css';
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [stats, setStats] = useState({ total_users: 0, top_users: [] }); // Ajoutez cette ligne
+  const [stats, setStats] = useState({ total_users: 0, top_users: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-  const [activeSection, setActiveSection] = useState('users'); // Nouveau state pour la section active
+  const [activeSection, setActiveSection] = useState('users');
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchUsers();
     fetchNotifications();
+    fetchStats(); // ⭐ AJOUTEZ CETTE LIGNE
     const notificationInterval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(notificationInterval);
   }, []);
@@ -90,6 +91,7 @@ const AdminDashboard = ({ setAuthToken }) => {
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
+
   const fetchStats = async () => {
     setIsLoading(true);
     try {
@@ -101,6 +103,7 @@ const AdminDashboard = ({ setAuthToken }) => {
       setIsLoading(false);
     }
   };
+
   return (
     <div className="admin-container">
       {/* Bouton de bascule mobile */}
