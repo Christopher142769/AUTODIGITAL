@@ -11,11 +11,14 @@ import {
   FaBars,
   FaBell
 } from 'react-icons/fa';
+// Importations de Recharts
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './AdminDashboard.css';
 
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [stats, setStats] = useState({ total_users: 0, top_users: [] }); // Ajoutez cette ligne
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
