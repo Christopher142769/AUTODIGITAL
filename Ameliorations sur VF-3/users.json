@@ -25,5 +25,12 @@
         "role": "user",
         "trials_left": 3,
         "subscription_end": null
+    },
+    "ca": {
+        "username": "ca",
+        "hashed_password": "$2b$12$vnMfiK3XAcMn77.QS2Nd7eUUiUxDESov4K97ZpYO7KXAuB2IyYgxe",
+        "role": "user",
+        "trials_left": 3,
+        "subscription_end": null
     }
 }

@@ -16,7 +16,134 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from enum import Enum
 import shutil
+# --- IMPORTS PAYDUNYA ---
+from paydunya import PayDunya
+from paydunya import CheckoutInvoice
 
+# Configuration de PayDunya
+PAYDUNYA_API_KEY = "YOUR_PAYDUNYA_MASTER_KEY" # REMPLACER
+PAYDUNYA_API_SECRET = "YOUR_PAYDUNYA_SECRET_KEY" # REMPLACER
+PAYDUNYA_TOKEN = "YOUR_PAYDUNYA_TOKEN" # REMPLACER
+PAYDUNYA_MODE = "test" # ou 'live'
+
+# Initialisation de PayDunya
+PayDunya.api_key = PAYDUNYA_API_KEY
+PayDunya.api_secret = PAYDUNYA_API_SECRET
+PayDunya.token = PAYDUNYA_TOKEN
+PayDunya.mode = PAYDUNYA_MODE
+
+# Définir une base de données de notifications
+NOTIFICATIONS_DB = Path("notifications.json")
+if not NOTIFICATIONS_DB.exists():
+    with open(NOTIFICATIONS_DB, "w") as f:
+        json.dump([], f, indent=4)
+
+# Modèle Pydantic pour les requêtes de paiement
+class PaymentRequest(BaseModel):
+    plan: str
+    amount: float
+    callback_url: str
+    return_url: str
+
+# Modèle Pydantic pour la vérification du paiement
+class PayDunyaCallback(BaseModel):
+    token: str
+
+# Endpoint pour créer une facture de paiement
+@app.post("/create-payment-invoice")
+async def create_payment_invoice(request: PaymentRequest, current_user: UserInDB = Depends(get_current_user)):
+    try:
+        invoice = CheckoutInvoice()
+        invoice.add_item(
+            name=f"Abonnement {request.plan} pour {current_user.username}",
+            quantity=1,
+            unit_price=request.amount,
+            total_price=request.amount
+        )
+        invoice.add_custom_data("username", current_user.username)
+        invoice.add_custom_data("plan", request.plan)
+        invoice.add_custom_data("months", {"1_month": 1, "6_months": 6, "12_months": 12}.get(request.plan))
+
+        invoice.set_total_price(request.amount)
+        invoice.set_cancel_url(request.return_url)
+        invoice.set_return_url(request.return_url)
+        invoice.set_callback_url(request.callback_url)
+
+        if invoice.create():
+            return {"success": True, "invoice_url": invoice.invoice_url}
+        else:
+            logger.error(f"PayDunya API Error: {invoice.response_text}")
+            raise HTTPException(status_code=500, detail="Erreur lors de la création de la facture de paiement.")
+
+    except Exception as e:
+        logger.error(f"Erreur de création de facture: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
+
+# Endpoint pour la vérification de la transaction (Callback PayDunya)
+@app.post("/payment-callback")
+async def paydunya_callback(request: PayDunyaCallback):
+    try:
+        invoice = CheckoutInvoice()
+        invoice.confirm(request.token)
+
+        if invoice.status == "completed":
+            username = invoice.get_custom_data("username")
+            plan = invoice.get_custom_data("plan")
+            months = invoice.get_custom_data("months")
+
+            user_in_db = get_user_from_db(username)
+            if user_in_db:
+                # Mettre à jour l'abonnement dans la base de données
+                with open(USERS_DB, "r+") as f:
+                    users = json.load(f)
+                    users[username]["trials_left"] = -1
+                    users[username]["subscription_end"] = (datetime.now() + timedelta(days=months * 30)).isoformat()
+                    f.seek(0)
+                    json.dump(users, f, indent=4)
+
+                # Créer une notification pour l'administrateur
+                notification_message = f"Paiement reçu ! 🎉 {username} a payé un abonnement de {months} mois pour le plan '{plan}'."
+                add_notification(notification_message, username, months, "success")
+                logger.info(notification_message)
+
+            return {"success": True, "message": "Paiement validé et abonnement mis à jour."}
+        else:
+            add_notification(f"Échec de paiement pour l'utilisateur: {invoice.get_custom_data('username')}.", invoice.get_custom_data("username"), None, "failed")
+            return {"success": False, "message": "Paiement non complété."}
+
+    except Exception as e:
+        logger.error(f"Erreur de callback PayDunya: {e}")
+        add_notification(f"Erreur interne du serveur lors du traitement d'un paiement.", "system", None, "error")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur lors du traitement du paiement.")
+
+# Fonction pour ajouter une notification
+def add_notification(message: str, user: str, months: int | None, status: str):
+    try:
+        with open(NOTIFICATIONS_DB, "r+") as f:
+            notifications = json.load(f)
+            notifications.insert(0, {
+                "timestamp": datetime.now().isoformat(),
+                "message": message,
+                "user": user,
+                "months": months,
+                "status": status
+            })
+            f.seek(0)
+            json.dump(notifications, f, indent=4)
+    except Exception as e:
+        logger.error(f"Erreur d'ajout de notification: {e}")
+
+# Endpoint pour récupérer les notifications (pour l'admin)
+@app.get("/admin/notifications")
+async def get_admin_notifications(current_admin: UserInDB = Depends(get_current_admin_user)):
+    try:
+        with open(NOTIFICATIONS_DB, "r") as f:
+            notifications = json.load(f)
+            return {"notifications": notifications}
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Erreur de lecture de la base de données des notifications: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
+        
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -463,6 +590,38 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
     except Exception as e:
         logger.error(f"Erreur lors de la rétrogradation de l'administrateur: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
+        # --- Nouveau endpoint pour les statistiques de l'administrateur ---
+@app.get("/admin/stats")
+async def get_admin_stats(current_admin: UserInDB = Depends(get_current_admin_user)):
+    try:
+        # 1. Nombre total d'utilisateurs
+        with open(USERS_DB, "r") as f:
+            users_data = json.load(f)
+            total_users = len(users_data)
+        
+        # 2. Top 5 des utilisateurs les plus actifs
+        user_generations = {}
+        for user_folder in UPLOAD_DIR.iterdir():
+            if user_folder.is_dir():
+                username = user_folder.name
+                # Compter le nombre de fichiers (générations) dans le dossier de l'utilisateur
+                generations_count = len(list(user_folder.glob("*.html")))
+                user_generations[username] = generations_count
+        
+        # Trier par nombre de générations décroissant et prendre le top 5
+        top_users = sorted(user_generations.items(), key=lambda item: item[1], reverse=True)[:5]
+        
+        # Convertir en un format facile à utiliser pour le frontend
+        top_users_data = [{"username": user, "generations": count} for user, count in top_users]
+
+        return {
+            "total_users": total_users,
+            "top_users": top_users_data,
+        }
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des statistiques: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur lors de la récupération des statistiques.")
 
 if __name__ == "__main__":
     import uvicorn
