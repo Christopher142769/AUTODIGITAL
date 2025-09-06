@@ -17,8 +17,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 import shutil
 # --- IMPORTS PAYDUNYA ---
-from paydunya import PayDunya
-from paydunya import CheckoutInvoice
+from paydunya.api import PayDunya
+from paydunya.checkout import CheckoutInvoice
 
 # Configuration de PayDunya
 PAYDUNYA_API_KEY = "YOUR_PAYDUNYA_MASTER_KEY" # REMPLACER
@@ -143,7 +143,7 @@ async def get_admin_notifications(current_admin: UserInDB = Depends(get_current_
     except (IOError, json.JSONDecodeError) as e:
         logger.error(f"Erreur de lecture de la base de données des notifications: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
-        
+
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
