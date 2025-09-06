@@ -8,20 +8,26 @@ import {
   FaCog,
   FaSignOutAlt,
   FaTimes,
-  FaBars
+  FaBars,
+  FaBell
 } from 'react-icons/fa';
 import './AdminDashboard.css';
 
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [activeSection, setActiveSection] = useState('users'); // Nouveau state pour la section active
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchUsers();
+    fetchNotifications();
+    const notificationInterval = setInterval(fetchNotifications, 15000);
+    return () => clearInterval(notificationInterval);
   }, []);
 
   // Gère l'état de la sidebar en fonction de la taille de l'écran
@@ -45,6 +51,15 @@ const AdminDashboard = ({ setAuthToken }) => {
       setError(err.response?.data?.detail || 'Erreur lors de la récupération des utilisateurs.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.get('https://autodigital.onrender.com/admin/notifications');
+      setNotifications(response.data.notifications);
+    } catch (err) {
+      console.error('Erreur lors de la récupération des notifications:', err);
     }
   };
 
@@ -72,7 +87,17 @@ const AdminDashboard = ({ setAuthToken }) => {
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
-
+  const fetchStats = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get('https://autodigital.onrender.com/admin/stats');
+      setStats(response.data);
+    } catch (err) {
+      console.error('Erreur lors de la récupération des statistiques:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="admin-container">
       {/* Bouton de bascule mobile */}
@@ -86,15 +111,20 @@ const AdminDashboard = ({ setAuthToken }) => {
           <h2 className="logo neon-text">⚡ DUXAI ⚡</h2>
         </div>
         <ul className="sidebar-menu">
-          <li className="menu-item active">
+          <li className={`menu-item ${activeSection === 'users' ? 'active' : ''}`} onClick={() => setActiveSection('users')}>
             <FaUsers />
             <span>Utilisateurs</span>
           </li>
-          <li className="menu-item">
+          <li className={`menu-item ${activeSection === 'notifications' ? 'active' : ''}`} onClick={() => setActiveSection('notifications')}>
+            <FaBell />
+            <span>Notifications</span>
+            {notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}
+          </li>
+          <li className={`menu-item ${activeSection === 'stats' ? 'active' : ''}`} onClick={() => setActiveSection('stats')}>
             <FaChartLine />
             <span>Statistiques</span>
           </li>
-          <li className="menu-item">
+          <li className={`menu-item ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')}>
             <FaCog />
             <span>Paramètres</span>
           </li>
@@ -117,37 +147,89 @@ const AdminDashboard = ({ setAuthToken }) => {
         {isLoading && <p className="loading-message">Chargement des données...</p>}
         {error && <p className="error-message">{error}</p>}
         
-        <div className="card user-list-card">
-          <h2 className="neon-subtitle">👥 Liste des Utilisateurs</h2>
-          <table className="user-table">
-            <thead>
-              <tr>
-                <th>Nom d'utilisateur</th>
-                <th>Rôle</th>
-                <th>Essais Restants</th>
-                <th>Abonnement</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr key={user.username}>
-                  <td data-label="Nom d'utilisateur">{user.username}</td>
-                  <td data-label="Rôle"><span className={`role-badge ${user.role}`}>{user.role}</span></td>
-                  <td data-label="Essais Restants">{user.trials_left === -1 ? 'Illimité' : user.trials_left}</td>
-                  <td data-label="Abonnement">{user.subscription_end ? new Date(user.subscription_end).toLocaleDateString() : 'Aucun'}</td>
-                  <td data-label="Actions">
-                    {user.role === 'user' && (
-                      <button className="grant-btn" onClick={() => setSelectedUser(user)}>
-                        ⚡ Accorder
-                      </button>
-                    )}
-                  </td>
+        {/* Affichage conditionnel des sections */}
+        {activeSection === 'users' && (
+          <div className="card user-list-card">
+            <h2 className="neon-subtitle">👥 Liste des Utilisateurs</h2>
+            <table className="user-table">
+              <thead>
+                <tr>
+                  <th>Nom d'utilisateur</th>
+                  <th>Rôle</th>
+                  <th>Essais Restants</th>
+                  <th>Abonnement</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map(user => (
+                  <tr key={user.username}>
+                    <td data-label="Nom d'utilisateur">{user.username}</td>
+                    <td data-label="Rôle"><span className={`role-badge ${user.role}`}>{user.role}</span></td>
+                    <td data-label="Essais Restants">{user.trials_left === -1 ? 'Illimité' : user.trials_left}</td>
+                    <td data-label="Abonnement">{user.subscription_end ? new Date(user.subscription_end).toLocaleDateString() : 'Aucun'}</td>
+                    <td data-label="Actions">
+                      {user.role === 'user' && (
+                        <button className="grant-btn" onClick={() => setSelectedUser(user)}>
+                          ⚡ Accorder
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeSection === 'notifications' && (
+          <div className="card notification-list-card">
+            <h2 className="neon-subtitle">🔔 Notifications de Paiement</h2>
+            <div className="notification-list">
+              {notifications.length === 0 ? (
+                <p className="muted">Aucune nouvelle notification.</p>
+              ) : (
+                notifications.map((notif, index) => (
+                  <div key={index} className={`notification-item ${notif.status}`}>
+                    <span className="notification-timestamp">{new Date(notif.timestamp).toLocaleString()}</span>
+                    <p className="notification-message">{notif.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        {activeSection === 'stats' && (
+          <div className="card stats-card">
+            <h2 className="neon-subtitle">📊 Statistiques</h2>
+            <div className="stats-grid">
+              <div className="stat-item">
+                <p className="stat-label">Total Utilisateurs</p>
+                <p className="stat-value">{stats.total_users}</p>
+              </div>
+              <div className="stat-item">
+                <p className="stat-label">Générations</p>
+                <p className="stat-value">{stats.top_users.reduce((sum, user) => sum + user.generations, 0)}</p>
+              </div>
+            </div>
+            <div className="chart-container">
+              <h3>Top 5 des utilisateurs les plus actifs</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={stats.top_users}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.5} />
+                  <XAxis dataKey="username" stroke="#fff" />
+                  <YAxis stroke="#fff" />
+                  <Tooltip />
+                  <Bar dataKey="generations" fill="#00f0ff" barSize={30} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+        {/* Ajoutez d'autres sections ici (statistiques, paramètres, etc.) */}
       </main>
 
       {/* Modal */}

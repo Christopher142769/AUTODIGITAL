@@ -263,7 +263,7 @@ function App({ authToken, setAuthToken }) {
 
                   <div className="card-preview-container">
                     <iframe
-                      src={`http://127.0.0.1:8000/files/${username}/${file.name}`}
+                      src={`https://autodigital.onrender.com/files/${username}/${file.name}`}
                       title={file.name}
                       className="card-preview-iframe"
                       sandbox="allow-scripts allow-same-origin"
@@ -277,7 +277,7 @@ function App({ authToken, setAuthToken }) {
                     >Modifier</button>
 
                     <a
-                      href={`http://127.00.1:8000/files/${username}/${file.name}`}
+                      href={`https://autodigital.onrender.com/files/${username}/${file.name}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
