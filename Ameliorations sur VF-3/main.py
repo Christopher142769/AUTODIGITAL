@@ -522,18 +522,16 @@ async def upload_profile_image(file: UploadFile = File(...), current_admin: User
         logger.error(f"Erreur lors du téléchargement de l'image de profil: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
 
+
 @app.delete("/admin/users/{username}")
 async def delete_user(username: str, current_admin: UserInDB = Depends(get_current_admin_user)):
     if username == "admin" or username == current_admin.username:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous supprimer ou supprimer l'administrateur principal.")
-        
-    user_in_db = get_user_from_db(username)
-    if not user_in_db:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
-        
+
     try:
         with open(USERS_DB, "r+") as f:
             users = json.load(f)
+
             if username in users:
                 del users[username]
                 
