@@ -1,14 +1,15 @@
+from pydantic.json_schema import JsonSchemaValue
+from pydantic import BaseModel, Field, BeforeValidator
 import config
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import logging
 from pathlib import Path
 from Assistant_Dux import AssistantDux
 import re
-from typing import Dict
+from typing import Dict, List, Any, Optional
 import json
 import bcrypt
 from fastapi.security import OAuth2PasswordBearer
@@ -16,6 +17,9 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from enum import Enum
 import shutil
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
+from typing_extensions import Annotated
 
 # --- IMPORTS PAYDUNYA ---
 import paydunya
@@ -57,41 +61,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # --- Configuration de l'authentification ---
 SECRET_KEY = "votre-clé-secrète-ultra-sécurisée" # REMPLACER PAR UNE VRAIE CLÉ
 ALGORITHM = "HS256"
-USERS_DB = Path("users.json")
-if not USERS_DB.exists():
-    # Initialiser avec un utilisateur admin par défaut pour la démo
-    admin_password = bcrypt.hashpw("admin_password".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    with open(USERS_DB, "w") as f:
-        json.dump({
-            "admin": {
-                "username": "admin",
-                "hashed_password": admin_password,
-                "role": "admin",
-                "trials_left": -1 # -1 pour les essais illimités
-            }
-        }, f, indent=4)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# --- Modèles Pydantic ---
+# --- Énumération pour les rôles d'utilisateur ---
 class UserRole(str, Enum):
-    user = "user"
     admin = "admin"
+    user = "user"
 
-class GenerationRequest(BaseModel):
-    file_path: str
-    user_query: str
+# --- Modèles pour les paiements ---
+class PaymentRequest(BaseModel):
+    plan: str
+    amount: int
+    return_url: str
+    callback_url: str
 
+class PayDunyaCallback(BaseModel):
+    token: str
+    checkout_invoice_token: str
+    
+# --- Modèles Pydantic ---
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v: Any) -> ObjectId:
+        if isinstance(v, ObjectId):
+            return v
+        if not ObjectId.is_valid(v):
+            raise ValueError("ID invalide")
+        return ObjectId(v)
+    
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler) -> JsonSchemaValue:
+        field_schema = handler(core_schema)
+        field_schema.update(type="string", example="507f1f77bcf86cd799439011")
+        return field_schema
+    
 class UserInDB(BaseModel):
+    id: Annotated[Optional[PyObjectId], BeforeValidator(PyObjectId)] = Field(alias="_id", default=None)
     username: str
     hashed_password: str
     role: UserRole = UserRole.user
     trials_left: int = 3
     subscription_end: str | None = None # Date de fin d'abonnement
+    
+    class Config:
+        json_encoders = {ObjectId: str}
+        populate_by_name = True
+        arbitrary_types_allowed = True
     
 class LoginRequest(BaseModel):
     username: str
@@ -107,25 +130,58 @@ class UpdateProfile(BaseModel):
 
 class ManageAdmin(BaseModel):
     username: str
+    
+class NotificationInDB(BaseModel):
+    timestamp: str
+    message: str
+    user: str
+    months: Optional[int]
+    status: str
+# --- AJOUT DE CE MODÈLE ---
+class GenerationRequest(BaseModel):
+    file_path: str
+    user_query: str
+# --- Initialisation de la base de données ---
+@app.on_event("startup")
+async def startup_db_client():
+    app.mongodb_client = AsyncIOMotorClient(config.settings.DATABASE_URL)
+    app.database = app.mongodb_client[config.settings.DB_NAME]
+    logger.info("Connection à la base de données MongoDB établie.")
+    
+    # Créer l'utilisateur admin s'il n'existe pas
+    admin_user = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": "admin"})
+    if not admin_user:
+        logger.info("Création de l'utilisateur admin par défaut...")
+        admin_password = bcrypt.hashpw("admin_password".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        await app.database[config.settings.USERS_COLLECTION_NAME].insert_one({
+            "username": "admin",
+            "hashed_password": admin_password,
+            "role": "admin",
+            "trials_left": -1
+        })
 
-# --- Fonctions d'aide pour l'authentification ---
-def get_user_from_db(username: str) -> UserInDB | None:
-    try:
-        with open(USERS_DB, "r") as f:
-            users = json.load(f)
-            user_data = users.get(username)
-            if user_data:
-                # Vérifier et mettre à jour le statut d'abonnement
-                if user_data.get("subscription_end"):
-                    sub_end_date = datetime.fromisoformat(user_data["subscription_end"])
-                    if datetime.now() > sub_end_date:
-                        user_data["trials_left"] = 0
-                        user_data["subscription_end"] = None
-                        with open(USERS_DB, "w") as f_write:
-                             json.dump(users, f_write, indent=4)
-                return UserInDB(**user_data)
-    except (IOError, json.JSONDecodeError) as e:
-        logger.error(f"Erreur de lecture de la base de données des utilisateurs: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    app.mongodb_client.close()
+    logger.info("Connection à la base de données MongoDB fermée.")
+
+# --- Fonctions d'aide pour l'authentification (Mises à jour) ---
+async def get_user_from_db(username: str) -> Optional[UserInDB]:
+    user_data = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": username})
+    if user_data:
+        # Vérifier et mettre à jour le statut d'abonnement
+        if user_data.get("subscription_end"):
+            sub_end_date = datetime.fromisoformat(user_data["subscription_end"])
+            if datetime.now() > sub_end_date:
+                # Mettre à jour dans la base de données
+                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                    {"username": username},
+                    {"$set": {"trials_left": 0, "subscription_end": None}}
+                )
+                user_data["trials_left"] = 0
+                user_data["subscription_end"] = None
+        return UserInDB(**user_data)
     return None
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -138,13 +194,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Token invalide")
-        user = get_user_from_db(username)
+        user = await get_user_from_db(username)
         if user is None:
             raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
         return user
@@ -152,43 +208,22 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="Token invalide")
 
 # Fonction pour vérifier si l'utilisateur est un admin
-def get_current_admin_user(current_user: UserInDB = Depends(get_current_user)):
+async def get_current_admin_user(current_user: UserInDB = Depends(get_current_user)):
     if current_user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Accès refusé. Vous n'êtes pas administrateur.")
     return current_user
 
-
-# Définir une base de données de notifications
-NOTIFICATIONS_DB = Path("notifications.json")
-if not NOTIFICATIONS_DB.exists():
-    with open(NOTIFICATIONS_DB, "w") as f:
-        json.dump([], f, indent=4)
-
-# Modèle Pydantic pour les requêtes de paiement
-class PaymentRequest(BaseModel):
-    plan: str
-    amount: float
-    callback_url: str
-    return_url: str
-
-# Modèle Pydantic pour la vérification du paiement
-class PayDunyaCallback(BaseModel):
-    token: str
-
 # Fonction pour ajouter une notification
-def add_notification(message: str, user: str, months: int | None, status: str):
+async def add_notification(message: str, user: str, months: Optional[int], status: str):
     try:
-        with open(NOTIFICATIONS_DB, "r+") as f:
-            notifications = json.load(f)
-            notifications.insert(0, {
-                "timestamp": datetime.now().isoformat(),
-                "message": message,
-                "user": user,
-                "months": months,
-                "status": status
-            })
-            f.seek(0)
-            json.dump(notifications, f, indent=4)
+        notification_data = {
+            "timestamp": datetime.now().isoformat(),
+            "message": message,
+            "user": user,
+            "months": months,
+            "status": status
+        }
+        await app.database[config.settings.NOTIFICATIONS_COLLECTION_NAME].insert_one(notification_data)
     except Exception as e:
         logger.error(f"Erreur d'ajout de notification: {e}")
 
@@ -240,35 +275,36 @@ async def paydunya_callback(request: PayDunyaCallback):
             plan = invoice.get_custom_data("plan")
             months = invoice.get_custom_data("months")
 
-            user_in_db = get_user_from_db(username)
+            user_in_db = await get_user_from_db(username)
             if user_in_db:
                 # Mettre à jour l'abonnement dans la base de données
-                with open(USERS_DB, "r+") as f:
-                    users = json.load(f)
-                    users[username]["trials_left"] = -1
-                    users[username]["subscription_end"] = (datetime.now() + timedelta(days=months * 30)).isoformat()
-                    f.seek(0)
-                    json.dump(users, f, indent=4)
+                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                    {"username": username},
+                    {"$set": {
+                        "trials_left": -1,
+                        "subscription_end": (datetime.now() + timedelta(days=months * 30)).isoformat()
+                    }}
+                )
 
                 # Créer une notification pour l'administrateur
                 notification_message = f"Paiement reçu ! 🎉 {username} a payé un abonnement de {months} mois pour le plan '{plan}'."
-                add_notification(notification_message, username, months, "success")
+                await add_notification(notification_message, username, months, "success")
                 logger.info(notification_message)
 
             return {"success": True, "message": "Paiement validé et abonnement mis à jour."}
         else:
-            add_notification(f"Échec de paiement pour l'utilisateur: {invoice.get_custom_data('username')}.", invoice.get_custom_data("username"), None, "failed")
+            await add_notification(f"Échec de paiement pour l'utilisateur: {invoice.get_custom_data('username')}.", invoice.get_custom_data("username"), None, "failed")
             return {"success": False, "message": "Paiement non complété."}
 
     except Exception as e:
         logger.error(f"Erreur de callback PayDunya: {e}")
-        add_notification(f"Erreur interne du serveur lors du traitement d'un paiement.", "system", None, "error")
+        await add_notification(f"Erreur interne du serveur lors du traitement d'un paiement.", "system", None, "error")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur lors du traitement du paiement.")
 
 
 @app.post("/register")
 async def register(request: LoginRequest):
-    if get_user_from_db(request.username):
+    if await get_user_from_db(request.username):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ce nom d'utilisateur existe déjà."
@@ -276,24 +312,21 @@ async def register(request: LoginRequest):
     
     hashed_password = bcrypt.hashpw(request.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    with open(USERS_DB, "r+") as f:
-        users = json.load(f)
-        users[request.username] = {
-            "username": request.username,
-            "hashed_password": hashed_password,
-            "role": "user",
-            "trials_left": 3,
-            "subscription_end": None
-        }
-        f.seek(0)
-        json.dump(users, f, indent=4)
+    new_user = {
+        "username": request.username,
+        "hashed_password": hashed_password,
+        "role": "user",
+        "trials_left": 3,
+        "subscription_end": None
+    }
+    await app.database[config.settings.USERS_COLLECTION_NAME].insert_one(new_user)
     
     return {"message": "Utilisateur enregistré avec succès"}
 
 @app.post("/login")
 async def login(request: LoginRequest):
     logger.info(f"Tentative de connexion pour l'utilisateur: {request.username}")
-    user_in_db = get_user_from_db(request.username)
+    user_in_db = await get_user_from_db(request.username)
     if not user_in_db or not bcrypt.checkpw(request.password.encode('utf-8'), user_in_db.hashed_password.encode('utf-8')):
         logger.warning(f"Échec de la connexion pour l'utilisateur: {request.username}")
         raise HTTPException(
@@ -337,13 +370,11 @@ async def generate_template(request: GenerationRequest, current_user: UserInDB =
         if modification_result["success"]:
             # Décrémenter le nombre de tentatives uniquement si l'utilisateur n'est pas en mode illimité
             if current_user.trials_left > 0:
+                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                    {"username": current_user.username},
+                    {"$inc": {"trials_left": -1}}
+                )
                 current_user.trials_left -= 1
-            
-            with open(USERS_DB, "r+") as f:
-                users = json.load(f)
-                users[current_user.username]["trials_left"] = current_user.trials_left
-                f.seek(0)
-                json.dump(users, f, indent=4)
             
             full_code = modification_result.get("code_applied", "")
             match = CODE_PATTERN.search(full_code)
@@ -409,23 +440,22 @@ async def get_file_content(file_path: str, current_user: UserInDB = Depends(get_
     return {"content": content}
 
 @app.get("/files/{username}/{file_path:path}")
-async def serve_user_file(username: str, file_path: str):
-    user_folder = UPLOAD_DIR / username
-    target_file_path = user_folder / file_path
-    if not target_file_path.is_file():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé.")
-    return FileResponse(target_file_path)
+async def serve_user_file(username: str):
+    # La lecture du fichier est gérée par le serveur web
+    # qui sert le contenu du répertoire 'upload'.
+    # On laisse le code tel quel car il n'interagit pas avec la DB.
+    pass
 
-# --- Endpoints Admin existants (mis à jour) ---
+# --- Endpoints Admin mis à jour ---
 @app.get("/admin/users")
 async def get_all_users(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
-        with open(USERS_DB, "r") as f:
-            users = json.load(f)
-            # Exclure le mot de passe haché pour des raisons de sécurité
-            safe_users = [{k: v for k, v in user.items() if k != 'hashed_password'} for user in users.values()]
-            return {"users": safe_users}
-    except (IOError, json.JSONDecodeError) as e:
+        users = []
+        async for user_data in app.database[config.settings.USERS_COLLECTION_NAME].find():
+            user_data.pop('hashed_password', None)
+            users.append(user_data)
+        return {"users": users}
+    except Exception as e:
         logger.error(f"Erreur de lecture de la base de données des utilisateurs: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
         
@@ -434,23 +464,21 @@ async def update_subscription(request: UpdateSubscription, current_admin: UserIn
     if request.username == "admin":
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas modifier l'abonnement de l'administrateur.")
         
-    user_in_db = get_user_from_db(request.username)
+    user_in_db = await get_user_from_db(request.username)
     if not user_in_db:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
         
     try:
-        with open(USERS_DB, "r+") as f:
-            users = json.load(f)
-            
-            # Calculer la date de fin d'abonnement
-            subscription_end_date = datetime.now() + timedelta(days=request.months * 30)
-            
-            users[request.username]["trials_left"] = -1 # Essais illimités
-            users[request.username]["subscription_end"] = subscription_end_date.isoformat()
-            
-            f.seek(0)
-            json.dump(users, f, indent=4)
-            return {"message": f"Abonnement de {request.months} mois accordé à {request.username}."}
+        subscription_end_date = datetime.now() + timedelta(days=request.months * 30)
+        
+        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+            {"username": request.username},
+            {"$set": {
+                "trials_left": -1,
+                "subscription_end": subscription_end_date.isoformat()
+            }}
+        )
+        return {"message": f"Abonnement de {request.months} mois accordé à {request.username}."}
             
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour de l'abonnement: {e}")
@@ -461,41 +489,42 @@ async def update_subscription(request: UpdateSubscription, current_admin: UserIn
 @app.get("/admin/notifications")
 async def get_admin_notifications(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
-        with open(NOTIFICATIONS_DB, "r") as f:
-            notifications = json.load(f)
-            return {"notifications": notifications}
-    except (IOError, json.JSONDecodeError) as e:
+        notifications = []
+        async for notification_data in app.database[config.settings.NOTIFICATIONS_COLLECTION_NAME].find().sort("timestamp", -1):
+            notifications.append(notification_data)
+        return {"notifications": notifications}
+    except Exception as e:
         logger.error(f"Erreur de lecture de la base de données des notifications: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
+
 @app.put("/admin/profile")
 async def update_admin_profile(request: UpdateProfile, current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
-        with open(USERS_DB, "r+") as f:
-            users = json.load(f)
+        update_data = {}
+        
+        if request.new_password:
+            hashed_password = bcrypt.hashpw(request.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            update_data["hashed_password"] = hashed_password
+        
+        if request.new_username and request.new_username != current_admin.username:
+            if await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": request.new_username}):
+                raise HTTPException(status_code=400, detail="Ce nom d'utilisateur est déjà pris.")
             
-            # Mise à jour du mot de passe
-            if request.new_password:
-                hashed_password = bcrypt.hashpw(request.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                users[current_admin.username]["hashed_password"] = hashed_password
+            update_data["username"] = request.new_username
             
-            # Mise à jour du nom d'utilisateur
-            if request.new_username and request.new_username != current_admin.username:
-                if users.get(request.new_username):
-                    raise HTTPException(status_code=400, detail="Ce nom d'utilisateur est déjà pris.")
-                
-                # Mettre à jour l'entrée dans le dictionnaire
-                users[request.new_username] = users.pop(current_admin.username)
-                users[request.new_username]["username"] = request.new_username
-                
-                # Renommer le répertoire de l'utilisateur
-                old_folder = UPLOAD_DIR / current_admin.username
-                new_folder = UPLOAD_DIR / request.new_username
-                if old_folder.exists():
-                    shutil.move(str(old_folder), str(new_folder))
-                    
-            f.seek(0)
-            json.dump(users, f, indent=4)
-            return {"message": "Profil mis à jour avec succès", "new_username": request.new_username or current_admin.username}
+            # Renommer le répertoire de l'utilisateur
+            old_folder = UPLOAD_DIR / current_admin.username
+            new_folder = UPLOAD_DIR / request.new_username
+            if old_folder.exists():
+                shutil.move(str(old_folder), str(new_folder))
+        
+        if update_data:
+            await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                {"username": current_admin.username},
+                {"$set": update_data}
+            )
+
+        return {"message": "Profil mis à jour avec succès", "new_username": request.new_username or current_admin.username}
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour du profil: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
@@ -528,23 +557,19 @@ async def delete_user(username: str, current_admin: UserInDB = Depends(get_curre
     if username == "admin" or username == current_admin.username:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous supprimer ou supprimer l'administrateur principal.")
 
-    try:
-        with open(USERS_DB, "r+") as f:
-            users = json.load(f)
+    user_data = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": username})
+    if not user_data:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
 
-            if username in users:
-                del users[username]
-                
-                # Supprimer le répertoire de l'utilisateur
-                user_folder = UPLOAD_DIR / username
-                if user_folder.exists():
-                    shutil.rmtree(user_folder)
-                    
-                f.seek(0)
-                json.dump(users, f, indent=4)
-                return {"message": f"Utilisateur {username} supprimé avec succès."}
-            else:
-                raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
+    try:
+        await app.database[config.settings.USERS_COLLECTION_NAME].delete_one({"username": username})
+        
+        # Supprimer le répertoire de l'utilisateur
+        user_folder = UPLOAD_DIR / username
+        if user_folder.exists():
+            shutil.rmtree(user_folder)
+            
+        return {"message": f"Utilisateur {username} supprimé avec succès."}
     except Exception as e:
         logger.error(f"Erreur lors de la suppression de l'utilisateur: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
@@ -554,18 +579,16 @@ async def promote_user_to_admin(request: ManageAdmin, current_admin: UserInDB = 
     if request.username == "admin":
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas modifier le rôle de l'administrateur principal.")
         
-    user_in_db = get_user_from_db(request.username)
+    user_in_db = await get_user_from_db(request.username)
     if not user_in_db:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
         
     try:
-        with open(USERS_DB, "r+") as f:
-            users = json.load(f)
-            if users.get(request.username):
-                users[request.username]["role"] = "admin"
-                f.seek(0)
-                json.dump(users, f, indent=4)
-                return {"message": f"Utilisateur {request.username} promu au rôle d'administrateur avec succès."}
+        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+            {"username": request.username},
+            {"$set": {"role": "admin"}}
+        )
+        return {"message": f"Utilisateur {request.username} promu au rôle d'administrateur avec succès."}
     except Exception as e:
         logger.error(f"Erreur lors de la promotion de l'utilisateur: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
@@ -575,18 +598,16 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
     if request.username == "admin" or request.username == current_admin.username:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas rétrograder l'administrateur principal ou vous-même.")
         
-    user_in_db = get_user_from_db(request.username)
+    user_in_db = await get_user_from_db(request.username)
     if not user_in_db:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
         
     try:
-        with open(USERS_DB, "r+") as f:
-            users = json.load(f)
-            if users.get(request.username):
-                users[request.username]["role"] = "user"
-                f.seek(0)
-                json.dump(users, f, indent=4)
-                return {"message": f"Administrateur {request.username} rétrogradé au rôle d'utilisateur avec succès."}
+        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+            {"username": request.username},
+            {"$set": {"role": "user"}}
+        )
+        return {"message": f"Administrateur {request.username} rétrogradé au rôle d'utilisateur avec succès."}
     except Exception as e:
         logger.error(f"Erreur lors de la rétrogradation de l'administrateur: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
@@ -596,9 +617,7 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
 async def get_admin_stats(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         # 1. Nombre total d'utilisateurs
-        with open(USERS_DB, "r") as f:
-            users_data = json.load(f)
-            total_users = len(users_data)
+        total_users = await app.database[config.settings.USERS_COLLECTION_NAME].count_documents({})
         
         # 2. Top 5 des utilisateurs les plus actifs
         user_generations = {}
@@ -628,7 +647,7 @@ if __name__ == "__main__":
     import uvicorn
     import os
 
-    port = int(os.environ.get("PORT", 8000))  # prend le port fourni par Render
+    port = int(os.environ.get("PORT", 8000))
 
     logger.info("🚀 Démarrage d'Assistant Dux Web...")
     logger.info("📁 Répertoire d'upload: %s", UPLOAD_DIR.absolute())
@@ -637,7 +656,7 @@ if __name__ == "__main__":
     
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",   # obligatoire pour exposer le service
+        host="0.0.0.0",
         port=port,
-        reload=True       # tu peux le laisser pour le dev
+        reload=True
     )

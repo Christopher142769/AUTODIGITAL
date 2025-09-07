@@ -1,18 +1,37 @@
 import os
-from dotenv import load_dotenv
-import logging # Import the logging module
+import logging
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Configuration du logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Charger les variables d'environnement depuis le fichier .env
-load_dotenv()
+class Settings(BaseSettings):
+    """
+    Configuration de l'application.
+    Les variables sont chargées depuis le fichier .env
+    """
+    
+    # Configuration de la base de données MongoDB
+    DATABASE_URL: str
+    DB_NAME: str
+    USERS_COLLECTION_NAME: str
+    NOTIFICATIONS_COLLECTION_NAME: str
+    
+    # Clé API Gemini
+    GEMINI_API_KEY: str
 
-# Récupérer la clé API Gemini depuis les variables d'environnement
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
-# Vérifier si la clé API est définie
-if not GEMINI_API_KEY:
-    logger.critical("La clé API Gemini n'est pas définie. Veuillez créer un fichier .env et y ajouter GEMINI_API_KEY=VOTRE_CLE")
-    raise ValueError("La clé API Gemini n'est pas définie. Veuillez créer un fichier .env et y ajouter GEMINI_API_KEY=VOTRE_CLE")
+# Création de l'instance des paramètres pour les charger depuis .env
+try:
+    settings = Settings()
+    logger.info("Configuration chargée avec succès.")
+except Exception as e:
+    logger.critical(f"Erreur lors du chargement des paramètres: {e}")
+    raise
 
-logger.info("Configuration chargée avec succès.")
+# Vérifier si la clé API Gemini est définie
+if not settings.GEMINI_API_KEY:
+    logger.critical("La clé API Gemini n'est pas définie. Veuillez l'ajouter à votre fichier .env")
+    raise ValueError("La clé API Gemini n'est pas définie. Veuillez l'ajouter à votre fichier .env")

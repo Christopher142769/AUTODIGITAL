@@ -5,6 +5,7 @@ cachetools==5.5.2
 certifi==2025.8.3
 charset-normalizer==3.4.3
 click==8.2.1
+dnspython==2.8.0
 ecdsa==0.19.1
 fastapi==0.116.1
 google-ai-generativelanguage==0.6.15
@@ -20,13 +21,16 @@ h11==0.16.0
 httplib2==0.30.0
 httptools==0.6.4
 idna==3.10
+motor==3.7.1
 paydunya==1.0.7
 proto-plus==1.26.1
 protobuf==5.29.5
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pydantic==2.11.7
+pydantic-settings==2.10.1
 pydantic_core==2.33.2
+pymongo==4.14.1
 pyparsing==3.2.3
 python-dotenv==1.1.1
 python-jose==3.5.0

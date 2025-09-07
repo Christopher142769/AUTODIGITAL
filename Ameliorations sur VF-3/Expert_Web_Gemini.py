@@ -2,7 +2,21 @@ import google.generativeai as genai
 import os
 from typing import Optional
 import logging # Import the logging module
+from pydantic import BaseModel
 
+class Settings(BaseModel):
+    """
+    Paramètres de configuration pour l'application Assistant Dux Web
+    """
+    # Chaîne de connexion à la base de données MongoDB
+    # L'application tentera de la lire depuis la variable d'environnement 'DATABASE_URL'
+    # Si elle n'est pas trouvée, elle utilisera la valeur par défaut fournie.
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "mongodb+srv://christopherguidibi_db_user:tqux2zY3hLBnTWEI@cluster0.1d1syyw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+    DB_NAME: str = "assistant_dux_db"
+    USERS_COLLECTION_NAME: str = "users"
+    NOTIFICATIONS_COLLECTION_NAME: str = "notifications"
+
+settings = Settings()
 logger = logging.getLogger(__name__)
 
 class GeminiWebExpert:
