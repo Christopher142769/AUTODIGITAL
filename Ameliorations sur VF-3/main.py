@@ -20,39 +20,43 @@ import shutil
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from typing_extensions import Annotated
-
+import certifi
+from motor.motor_asyncio import AsyncIOMotorClient
+import ssl
+from fastapi import FastAPI
+from motor.motor_asyncio import AsyncIOMotorClient
+import certifi
+import logging
+from config import settings, mongodb_client, db  # Utilisation directe de config.py
+import config  # ton fichier config.py avec Settings()
 # --- IMPORTS PAYDUNYA ---
 import paydunya
 from paydunya import Invoice
+# --- Configuration PayDunya ---
 PAYDUNYA_ACCESS_TOKENS = {
-  'PAYDUNYA-MASTER-KEY': "wQzk9ZwR-Qq9m-0hD0-zpud-je5coGC3FHKW",
-  'PAYDUNYA-PRIVATE-KEY': "test_private_rMIdJM3PLLhLjyArx9tF3VURAF5",
-  'PAYDUNYA-TOKEN': "IivOiOxGJuWhc5znlIiK"
+    'PAYDUNYA-MASTER-KEY': "wQzk9ZwR-Qq9m-0hD0-zpud-je5coGC3FHKW",
+    'PAYDUNYA-PRIVATE-KEY': "test_private_rMIdJM3PLLhLjyArx9tF3VURAF5",
+    'PAYDUNYA-TOKEN': "IivOiOxGJuWhc5znlIiK"
 }
-
-# Activer le mode 'test'. Le debug est à False par défaut
 paydunya.debug = True
-
-# Configurer les clés d'API
 paydunya.api_keys = PAYDUNYA_ACCESS_TOKENS
 
-# Configuration du logging
+# --- Logging ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Définition du répertoire d'upload
+# --- Répertoire upload ---
 UPLOAD_DIR = Path("upload")
-if not UPLOAD_DIR.exists():
-    UPLOAD_DIR.mkdir()
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Création de l'application FastAPI
+# --- App FastAPI ---
 app = FastAPI(
     title="Assistant Dux Web",
     description="API pour modifier des fichiers web avec l'IA",
     version="1.0.0"
 )
 
-# Configuration CORS
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,18 +65,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Configuration de l'authentification ---
-SECRET_KEY = "votre-clé-secrète-ultra-sécurisée" # REMPLACER PAR UNE VRAIE CLÉ
+# --- Authentification ---
+SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
 ALGORITHM = "HS256"
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# --- Énumération pour les rôles d'utilisateur ---
+
+# ============================================================
+#                        Modèles
+# ============================================================
+
 class UserRole(str, Enum):
     admin = "admin"
     user = "user"
 
-# --- Modèles pour les paiements ---
 class PaymentRequest(BaseModel):
     plan: str
     amount: int
@@ -82,8 +88,7 @@ class PaymentRequest(BaseModel):
 class PayDunyaCallback(BaseModel):
     token: str
     checkout_invoice_token: str
-    
-# --- Modèles Pydantic ---
+
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
@@ -96,26 +101,26 @@ class PyObjectId(ObjectId):
         if not ObjectId.is_valid(v):
             raise ValueError("ID invalide")
         return ObjectId(v)
-    
+
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler) -> JsonSchemaValue:
         field_schema = handler(core_schema)
         field_schema.update(type="string", example="507f1f77bcf86cd799439011")
         return field_schema
-    
+
 class UserInDB(BaseModel):
     id: Annotated[Optional[PyObjectId], BeforeValidator(PyObjectId)] = Field(alias="_id", default=None)
     username: str
     hashed_password: str
     role: UserRole = UserRole.user
     trials_left: int = 3
-    subscription_end: str | None = None # Date de fin d'abonnement
-    
+    subscription_end: str | None = None
+
     class Config:
         json_encoders = {ObjectId: str}
         populate_by_name = True
         arbitrary_types_allowed = True
-    
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -130,36 +135,79 @@ class UpdateProfile(BaseModel):
 
 class ManageAdmin(BaseModel):
     username: str
-    
+
 class NotificationInDB(BaseModel):
     timestamp: str
     message: str
     user: str
     months: Optional[int]
     status: str
-# --- AJOUT DE CE MODÈLE ---
+
 class GenerationRequest(BaseModel):
     file_path: str
     user_query: str
-# --- Initialisation de la base de données ---
+
+
+# ============================================================
+#               Connexion MongoDB (Startup/Shutdown)
+# ============================================================
+
+from motor.motor_asyncio import AsyncIOMotorClient
+import certifi
+import bcrypt
+import logging
+from fastapi import FastAPI
+import config  # ton fichier config.py avec Settings()
+import os
+from dotenv import load_dotenv
+load_dotenv()
+logger = logging.getLogger(__name__)
+app = FastAPI()
+
 @app.on_event("startup")
 async def startup_db_client():
-    app.mongodb_client = AsyncIOMotorClient(config.settings.DATABASE_URL)
-    app.database = app.mongodb_client[config.settings.DB_NAME]
-    logger.info("Connection à la base de données MongoDB établie.")
-    
-    # Créer l'utilisateur admin s'il n'existe pas
-    admin_user = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": "admin"})
-    if not admin_user:
-        logger.info("Création de l'utilisateur admin par défaut...")
-        admin_password = bcrypt.hashpw("admin_password".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        await app.database[config.settings.USERS_COLLECTION_NAME].insert_one({
-            "username": "admin",
-            "hashed_password": admin_password,
-            "role": "admin",
-            "trials_left": -1
-        })
+    try:
+        # --- Connexion sécurisée à MongoDB via variable d'environnement ---
+        mongodb_url = os.environ.get("DATABASE_URL")
+        if not mongodb_url:
+            raise Exception("La variable d'environnement DATABASE_URL n'est pas définie.")
+        
+        app.mongodb_client = AsyncIOMotorClient(
+            mongodb_url,
+            tls=True,
+            tlsCAFile=certifi.where(),
+            tlsAllowInvalidCertificates=False
+        )
 
+        # Sélection de la base de données
+        app.database = app.mongodb_client[os.environ.get("DB_NAME", "autodigital")]
+
+        # Test de connexion
+        await app.mongodb_client.admin.command("ping")
+        logger.info(f"✅ Connecté à MongoDB '{app.database.name}'.")
+
+        # Création de l'admin par défaut si absent
+        admin_user = await app.database["users"].find_one({"username": "admin"})
+        if not admin_user:
+            logger.info("Création de l'admin par défaut...")
+            admin_password = bcrypt.hashpw("admin_password".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            await app.database["users"].insert_one({
+                "username": "admin",
+                "hashed_password": admin_password,
+                "role": "admin",
+                "trials_left": -1
+            })
+
+    except Exception as e:
+        logger.error(f"❌ Erreur connexion MongoDB: {e}")
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    if hasattr(app, "mongodb_client"):
+        app.mongodb_client.close()
+        logger.info("🛑 Connexion MongoDB fermée.")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
@@ -655,8 +703,7 @@ if __name__ == "__main__":
     logger.info("📖 Documentation API: http://127.0.0.1:%s/docs" % port)
     
     uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True
-    )
+    "main:app",
+    host="0.0.0.0",
+    port=port
+)
