@@ -72,7 +72,6 @@ app.add_middleware(
     allow_methods=["*"],  # autorise GET, POST, OPTIONS, PUT, DELETE
     allow_headers=["*"],  # autorise Content-Type, Authorization, etc.
 )
-
 # --- Authentification ---
 SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
 ALGORITHM = "HS256"
