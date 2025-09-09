@@ -1,7 +1,6 @@
 # --- IMPORTS ---
 from pydantic.json_schema import JsonSchemaValue
 from pydantic import BaseModel, Field, BeforeValidator
-import config
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
@@ -25,6 +24,19 @@ import certifi
 import ssl
 import os
 from dotenv import load_dotenv
+import paydunya
+from paydunya import Invoice
+
+# ============================================================
+#               Configuration (Déplacée en haut)
+# ============================================================
+
+# Charger les variables d'environnement dès le début
+load_dotenv()
+
+# --- Logging ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- App FastAPI ---
 app = FastAPI(
@@ -52,10 +64,6 @@ SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# --- IMPORTS PAYDUNYA ---
-import paydunya
-from paydunya import Invoice
-
 # --- Configuration PayDunya ---
 PAYDUNYA_ACCESS_TOKENS = {
     'PAYDUNYA-MASTER-KEY': "wQzk9ZwR-Qq9m-0hD0-zpud-je5coGC3FHKW",
@@ -65,13 +73,13 @@ PAYDUNYA_ACCESS_TOKENS = {
 paydunya.debug = True
 paydunya.api_keys = PAYDUNYA_ACCESS_TOKENS
 
-# --- Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # --- Répertoire upload ---
 UPLOAD_DIR = Path("upload")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Définition des noms de collections
+USERS_COLLECTION_NAME = "users"
+NOTIFICATIONS_COLLECTION_NAME = "notifications"
 
 # ============================================================
 #                        Modèles
@@ -153,9 +161,6 @@ class GenerationRequest(BaseModel):
 #               Connexion MongoDB (Startup/Shutdown)
 # ============================================================
 
-load_dotenv()
-logger = logging.getLogger(__name__)
-
 @app.on_event("startup")
 async def startup_db_client():
     try:
@@ -179,11 +184,11 @@ async def startup_db_client():
         logger.info(f"✅ Connecté à MongoDB '{app.database.name}'.")
 
         # Création de l'admin par défaut si absent
-        admin_user = await app.database["users"].find_one({"username": "admin"})
+        admin_user = await app.database[USERS_COLLECTION_NAME].find_one({"username": "admin"})
         if not admin_user:
             logger.info("Création de l'admin par défaut...")
             admin_password = bcrypt.hashpw("admin_password".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-            await app.database["users"].insert_one({
+            await app.database[USERS_COLLECTION_NAME].insert_one({
                 "username": "admin",
                 "hashed_password": admin_password,
                 "role": "admin",
@@ -202,14 +207,14 @@ async def shutdown_db_client():
 
 # --- Fonctions d'aide pour l'authentification (Mises à jour) ---
 async def get_user_from_db(username: str) -> Optional[UserInDB]:
-    user_data = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": username})
+    user_data = await app.database[USERS_COLLECTION_NAME].find_one({"username": username})
     if user_data:
         # Vérifier et mettre à jour le statut d'abonnement
         if user_data.get("subscription_end"):
             sub_end_date = datetime.fromisoformat(user_data["subscription_end"])
             if datetime.now() > sub_end_date:
                 # Mettre à jour dans la base de données
-                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                await app.database[USERS_COLLECTION_NAME].update_one(
                     {"username": username},
                     {"$set": {"trials_left": 0, "subscription_end": None}}
                 )
@@ -223,7 +228,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=30)
+        expire = datetime.utcnow() + timedelta(hours=24) # Correction: 30 minutes est trop court pour un token
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -257,7 +262,7 @@ async def add_notification(message: str, user: str, months: Optional[int], statu
             "months": months,
             "status": status
         }
-        await app.database[config.settings.NOTIFICATIONS_COLLECTION_NAME].insert_one(notification_data)
+        await app.database[NOTIFICATIONS_COLLECTION_NAME].insert_one(notification_data)
     except Exception as e:
         logger.error(f"Erreur d'ajout de notification: {e}")
 
@@ -312,7 +317,7 @@ async def paydunya_callback(request: PayDunyaCallback):
             user_in_db = await get_user_from_db(username)
             if user_in_db:
                 # Mettre à jour l'abonnement dans la base de données
-                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                await app.database[USERS_COLLECTION_NAME].update_one(
                     {"username": username},
                     {"$set": {
                         "trials_left": -1,
@@ -353,7 +358,7 @@ async def register(request: LoginRequest):
         "trials_left": 3,
         "subscription_end": None
     }
-    await app.database[config.settings.USERS_COLLECTION_NAME].insert_one(new_user)
+    await app.database[USERS_COLLECTION_NAME].insert_one(new_user)
     
     return {"message": "Utilisateur enregistré avec succès"}
 
@@ -427,7 +432,7 @@ async def generate_template(request: GenerationRequest, current_user: UserInDB =
         if modification_result["success"]:
             # Décrémenter le nombre de tentatives uniquement si l'utilisateur n'est pas en mode illimité
             if current_user.trials_left > 0:
-                await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+                await app.database[USERS_COLLECTION_NAME].update_one(
                     {"username": current_user.username},
                     {"$inc": {"trials_left": -1}}
                 )
@@ -498,9 +503,6 @@ async def get_file_content(file_path: str, current_user: UserInDB = Depends(get_
 
 @app.get("/files/{username}/{file_path:path}")
 async def serve_user_file(username: str):
-    # La lecture du fichier est gérée par le serveur web
-    # qui sert le contenu du répertoire 'upload'.
-    # On laisse le code tel quel car il n'interagit pas avec la DB.
     pass
 
 # --- Endpoints Admin mis à jour ---
@@ -508,7 +510,7 @@ async def serve_user_file(username: str):
 async def get_all_users(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         users = []
-        async for user_data in app.database[config.settings.USERS_COLLECTION_NAME].find():
+        async for user_data in app.database[USERS_COLLECTION_NAME].find():
             user_data.pop('hashed_password', None)
             users.append(user_data)
         return {"users": users}
@@ -528,7 +530,7 @@ async def update_subscription(request: UpdateSubscription, current_admin: UserIn
     try:
         subscription_end_date = datetime.now() + timedelta(days=request.months * 30)
         
-        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+        await app.database[USERS_COLLECTION_NAME].update_one(
             {"username": request.username},
             {"$set": {
                 "trials_left": -1,
@@ -547,7 +549,7 @@ async def update_subscription(request: UpdateSubscription, current_admin: UserIn
 async def get_admin_notifications(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         notifications = []
-        async for notification_data in app.database[config.settings.NOTIFICATIONS_COLLECTION_NAME].find().sort("timestamp", -1):
+        async for notification_data in app.database[NOTIFICATIONS_COLLECTION_NAME].find().sort("timestamp", -1):
             notifications.append(notification_data)
         return {"notifications": notifications}
     except Exception as e:
@@ -564,7 +566,7 @@ async def update_admin_profile(request: UpdateProfile, current_admin: UserInDB =
             update_data["hashed_password"] = hashed_password
         
         if request.new_username and request.new_username != current_admin.username:
-            if await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": request.new_username}):
+            if await app.database[USERS_COLLECTION_NAME].find_one({"username": request.new_username}):
                 raise HTTPException(status_code=400, detail="Ce nom d'utilisateur est déjà pris.")
             
             update_data["username"] = request.new_username
@@ -576,7 +578,7 @@ async def update_admin_profile(request: UpdateProfile, current_admin: UserInDB =
                 shutil.move(str(old_folder), str(new_folder))
         
         if update_data:
-            await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+            await app.database[USERS_COLLECTION_NAME].update_one(
                 {"username": current_admin.username},
                 {"$set": update_data}
             )
@@ -614,12 +616,12 @@ async def delete_user(username: str, current_admin: UserInDB = Depends(get_curre
     if username == "admin" or username == current_admin.username:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous supprimer ou supprimer l'administrateur principal.")
 
-    user_data = await app.database[config.settings.USERS_COLLECTION_NAME].find_one({"username": username})
+    user_data = await app.database[USERS_COLLECTION_NAME].find_one({"username": username})
     if not user_data:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
 
     try:
-        await app.database[config.settings.USERS_COLLECTION_NAME].delete_one({"username": username})
+        await app.database[USERS_COLLECTION_NAME].delete_one({"username": username})
         
         # Supprimer le répertoire de l'utilisateur
         user_folder = UPLOAD_DIR / username
@@ -641,7 +643,7 @@ async def promote_user_to_admin(request: ManageAdmin, current_admin: UserInDB = 
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
         
     try:
-        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+        await app.database[USERS_COLLECTION_NAME].update_one(
             {"username": request.username},
             {"$set": {"role": "admin"}}
         )
@@ -660,7 +662,7 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
         
     try:
-        await app.database[config.settings.USERS_COLLECTION_NAME].update_one(
+        await app.database[USERS_COLLECTION_NAME].update_one(
             {"username": request.username},
             {"$set": {"role": "user"}}
         )
@@ -674,7 +676,7 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
 async def get_admin_stats(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         # 1. Nombre total d'utilisateurs
-        total_users = await app.database[config.settings.USERS_COLLECTION_NAME].count_documents({})
+        total_users = await app.database[USERS_COLLECTION_NAME].count_documents({})
         
         # 2. Top 5 des utilisateurs les plus actifs
         user_generations = {}
