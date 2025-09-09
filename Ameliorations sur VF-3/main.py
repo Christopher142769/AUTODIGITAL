@@ -1,11 +1,11 @@
-# --- IMOPORTS ---
+# --- IMPORTS ---
 from pydantic.json_schema import JsonSchemaValue
 from pydantic import BaseModel, Field, BeforeValidator
 import config
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware # Gardez cette ligne
+from fastapi.middleware.cors import CORSMiddleware
 import logging
 from pathlib import Path
 from Assistant_Dux import AssistantDux
@@ -34,12 +34,10 @@ app = FastAPI(
 )
 
 # --- CORS ---
-# Assurez-vous que cette partie est juste après la création de l'application
 origins = [
     "http://localhost:3000",
     "https://autodigitalservices.onrender.com"
 ]
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,14 +46,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # --- Authentification ---
-SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
+SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # --- IMPORTS PAYDUNYA ---
 import paydunya
 from paydunya import Invoice
+
 # --- Configuration PayDunya ---
 PAYDUNYA_ACCESS_TOKENS = {
     'PAYDUNYA-MASTER-KEY': "wQzk9ZwR-Qq9m-0hD0-zpud-je5coGC3FHKW",
@@ -149,14 +149,12 @@ class GenerationRequest(BaseModel):
     file_path: str
     user_query: str
 
-
 # ============================================================
 #               Connexion MongoDB (Startup/Shutdown)
 # ============================================================
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-# ANCIENNE LIGNE ERRONÉE : app = FastAPI()
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -196,17 +194,11 @@ async def startup_db_client():
         logger.error(f"❌ Erreur connexion MongoDB: {e}")
         raise
 
-
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if hasattr(app, "mongodb_client"):
         app.mongodb_client.close()
         logger.info("🛑 Connexion MongoDB fermée.")
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    app.mongodb_client.close()
-    logger.info("Connection à la base de données MongoDB fermée.")
 
 # --- Fonctions d'aide pour l'authentification (Mises à jour) ---
 async def get_user_from_db(username: str) -> Optional[UserInDB]:
