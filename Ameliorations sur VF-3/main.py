@@ -484,16 +484,21 @@ async def list_files(current_user: UserInDB = Depends(get_current_user)):
             detail=f"Erreur lors de la lecture du répertoire d'upload : {str(e)}"
         )
 
+# --- Endpoint de lecture de fichier amélioré ---
 @app.get("/get-file-content")
 async def get_file_content(file_path: str, current_user: UserInDB = Depends(get_current_user)):
     user_folder = UPLOAD_DIR / current_user.username
     target_file_path = user_folder / file_path
+    
+    # Ajout d'un journal pour le débogage
     logger.info(f"Tentative de lecture du fichier : {target_file_path}")
-
-    if not target_file_path.is_file():
+    
+    # Validation du chemin pour éviter les attaques par traversée de répertoire
+    if not target_file_path.is_file() or not target_file_path.is_relative_to(user_folder):
+        logger.error(f"Fichier non trouvé ou chemin invalide : {target_file_path}")
         raise HTTPException(
             status_code=404,
-            detail=f"Fichier non trouvé à l'emplacement : {target_file_path}"
+            detail="Fichier non trouvé"
         )
     
     with open(target_file_path, "r", encoding="utf-8") as f:
@@ -501,17 +506,23 @@ async def get_file_content(file_path: str, current_user: UserInDB = Depends(get_
         
     return {"content": content}
 
+# --- Endpoint de service de fichier amélioré ---
 @app.get("/files/{username}/{file_path:path}")
 async def serve_user_file(username: str, file_path: str):
     user_folder = UPLOAD_DIR / username
     full_path = user_folder / file_path
-    if not full_path.is_file() or not Path(file_path).is_relative_to(user_folder):
+    
+    # Ajout d'un journal pour le débogage
+    logger.info(f"Demande de service de fichier pour l'utilisateur '{username}' : {full_path}")
+    
+    # Validation du chemin
+    if not full_path.is_file() or not full_path.is_relative_to(user_folder):
+        logger.error(f"Fichier non trouvé ou chemin invalide : {full_path}")
         raise HTTPException(status_code=404, detail="File not found")
+        
     return FileResponse(full_path)
 
 # --- Endpoints Admin mis à jour ---
-# main.py
-
 @app.get("/admin/users")
 async def get_all_users(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
