@@ -28,7 +28,7 @@ import paydunya
 from paydunya import Invoice
 
 # ============================================================
-#       Configuration (Déplacée en haut)
+#                        Configuration
 # ============================================================
 
 # Charger les variables d'environnement dès le début
@@ -38,7 +38,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- App FastAPI ---
+# --- App FastAPI (Déclaration unique) ---
 app = FastAPI(
     title="Assistant Dux Web",
     description="API pour modifier des fichiers web avec l'IA",
@@ -82,7 +82,7 @@ USERS_COLLECTION_NAME = "users"
 NOTIFICATIONS_COLLECTION_NAME = "notifications"
 
 # ============================================================
-#                      Modèles
+#                        Modèles
 # ============================================================
 
 class UserRole(str, Enum):
@@ -158,7 +158,7 @@ class GenerationRequest(BaseModel):
     user_query: str
 
 # ============================================================
-#               Connexion MongoDB (Startup/Shutdown)
+#                        Connexion MongoDB (Startup/Shutdown)
 # ============================================================
 
 @app.on_event("startup")
@@ -411,7 +411,7 @@ async def generate_template(request: GenerationRequest, current_user: UserInDB =
         if current_user.subscription_end:
             sub_end_date = datetime.fromisoformat(current_user.subscription_end)
             if datetime.now() > sub_end_date:
-                  raise HTTPException(status_code=403, detail="Votre abonnement a expiré.")
+                raise HTTPException(status_code=403, detail="Votre abonnement a expiré.")
         else:
             raise HTTPException(status_code=403, detail="Vous avez atteint votre limite de 3 essais.")
         
@@ -502,8 +502,12 @@ async def get_file_content(file_path: str, current_user: UserInDB = Depends(get_
     return {"content": content}
 
 @app.get("/files/{username}/{file_path:path}")
-async def serve_user_file(username: str):
-    pass
+async def serve_user_file(username: str, file_path: str):
+    user_folder = UPLOAD_DIR / username
+    full_path = user_folder / file_path
+    if not full_path.is_file() or not Path(file_path).is_relative_to(user_folder):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(full_path)
 
 # --- Endpoints Admin mis à jour ---
 @app.get("/admin/users")
