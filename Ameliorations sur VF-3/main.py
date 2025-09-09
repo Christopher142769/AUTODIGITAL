@@ -28,7 +28,7 @@ import paydunya
 from paydunya import Invoice
 
 # ============================================================
-#               Configuration (Déplacée en haut)
+#       Configuration (Déplacée en haut)
 # ============================================================
 
 # Charger les variables d'environnement dès le début
@@ -82,7 +82,7 @@ USERS_COLLECTION_NAME = "users"
 NOTIFICATIONS_COLLECTION_NAME = "notifications"
 
 # ============================================================
-#                        Modèles
+#                      Modèles
 # ============================================================
 
 class UserRole(str, Enum):
@@ -411,7 +411,7 @@ async def generate_template(request: GenerationRequest, current_user: UserInDB =
         if current_user.subscription_end:
             sub_end_date = datetime.fromisoformat(current_user.subscription_end)
             if datetime.now() > sub_end_date:
-                 raise HTTPException(status_code=403, detail="Votre abonnement a expiré.")
+                  raise HTTPException(status_code=403, detail="Votre abonnement a expiré.")
         else:
             raise HTTPException(status_code=403, detail="Vous avez atteint votre limite de 3 essais.")
         
