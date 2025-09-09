@@ -57,6 +57,10 @@ app = FastAPI(
 )
 
 # --- CORS ---
+origins = [
+    "http://localhost:3000",  # Ton frontend local
+    "https://autodigitalservices.onrender.com",  # Ton frontend deployé
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -178,7 +182,7 @@ async def startup_db_client():
             tlsCAFile=certifi.where(),
             tlsAllowInvalidCertificates=False
         )
-        
+
         # Sélection de la base de données
         app.database = app.mongodb_client[os.environ.get("DB_NAME", "autodigital")]
 
