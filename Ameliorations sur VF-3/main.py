@@ -58,16 +58,18 @@ app = FastAPI(
 
 # --- CORS ---
 origins = [
-    "http://localhost:3000",  # Ton frontend local
-    "https://autodigitalservices.onrender.com",  # Ton frontend deployé
+    "http://localhost:3000",
+    "https://autodigitalservices.onrender.com"
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # --- Authentification ---
 SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
