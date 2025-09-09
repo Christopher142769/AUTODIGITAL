@@ -59,20 +59,19 @@ app = FastAPI(
 # --- CORS ---
 from fastapi.middleware.cors import CORSMiddleware
 
+
 origins = [
-    "http://localhost:3000",
-    "https://autodigitalservices.onrender.com"
+    "https://autodigitalservices.onrender.com",  # ton frontend
+    "http://localhost:3000",  # pour tester en local React
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,       # ⚠️ Pas "*" si credentials=True
-    allow_credentials=True,      
-    allow_methods=["*"],         # OPTIONS sera automatiquement géré
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
 
 # --- Authentification ---
 SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
