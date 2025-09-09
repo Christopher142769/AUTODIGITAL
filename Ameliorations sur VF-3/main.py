@@ -61,16 +61,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 origins = [
-    "https://autodigitalservices.onrender.com",  # ton frontend
-    "http://localhost:3000",  # pour tester en local React
+    "http://localhost:3000",                    # Frontend dev
+    "https://autodigitalservices.onrender.com" # Frontend prod
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # autorise GET, POST, OPTIONS, PUT, DELETE
+    allow_headers=["*"],  # autorise Content-Type, Authorization, etc.
 )
 
 # --- Authentification ---
