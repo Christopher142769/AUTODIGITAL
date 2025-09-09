@@ -1,10 +1,11 @@
+# --- IMOPORTS ---
 from pydantic.json_schema import JsonSchemaValue
 from pydantic import BaseModel, Field, BeforeValidator
 import config
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware # Gardez cette ligne
 import logging
 from pathlib import Path
 from Assistant_Dux import AssistantDux
@@ -21,7 +22,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from typing_extensions import Annotated
 import certifi
-from motor.motor_asyncio import AsyncIOMotorClient
 import ssl
 import os
 from dotenv import load_dotenv
@@ -34,17 +34,18 @@ app = FastAPI(
 )
 
 # --- CORS ---
+# Assurez-vous que cette partie est juste après la création de l'application
 origins = [
-    "http://localhost:3000",                    # Frontend dev
-    "https://autodigitalservices.onrender.com" # Frontend prod
+    "http://localhost:3000",
+    "https://autodigitalservices.onrender.com"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # autorise GET, POST, OPTIONS, PUT, DELETE
-    allow_headers=["*"],  # autorise Content-Type, Authorization, etc.
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 # --- Authentification ---
 SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
