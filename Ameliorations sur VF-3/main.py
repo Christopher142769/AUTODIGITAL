@@ -94,6 +94,7 @@ class PaymentRequest(BaseModel):
     amount: int
     return_url: str
     callback_url: str
+    months: int  # <-- NOUVEAU CHAMP
 
 class PayDunyaCallback(BaseModel):
     token: str
@@ -285,7 +286,7 @@ async def create_payment_invoice(request: PaymentRequest, current_user: UserInDB
         )
         invoice.add_custom_data("username", current_user.username)
         invoice.add_custom_data("plan", request.plan)
-        invoice.add_custom_data("months", {"1_month": 1, "6_months": 6, "12_months": 12}.get(request.plan))
+        invoice.add_custom_data("months", request.months) # <-- MODIFICATION APPORTÉE ICI
 
         invoice.set_total_price(request.amount)
         invoice.set_cancel_url(request.return_url)
