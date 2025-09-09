@@ -57,7 +57,7 @@ app = FastAPI(
 )
 
 # --- CORS ---
-ofrom fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 origins = [
     "http://localhost:3000",
