@@ -57,6 +57,8 @@ app = FastAPI(
 )
 
 # --- CORS ---
+ofrom fastapi.middleware.cors import CORSMiddleware
+
 origins = [
     "http://localhost:3000",
     "https://autodigitalservices.onrender.com"
@@ -64,11 +66,12 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=origins,       # ⚠️ Pas "*" si credentials=True
+    allow_credentials=True,      
+    allow_methods=["*"],         # OPTIONS sera automatiquement géré
     allow_headers=["*"],
 )
+
 
 
 # --- Authentification ---
