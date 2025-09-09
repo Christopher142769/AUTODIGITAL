@@ -23,12 +23,34 @@ from typing_extensions import Annotated
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 import ssl
-from fastapi import FastAPI
-from motor.motor_asyncio import AsyncIOMotorClient
-import certifi
-import logging
-from config import settings, mongodb_client, db  # Utilisation directe de config.py
-import config  # ton fichier config.py avec Settings()
+import os
+from dotenv import load_dotenv
+
+# --- App FastAPI ---
+app = FastAPI(
+    title="Assistant Dux Web",
+    description="API pour modifier des fichiers web avec l'IA",
+    version="1.0.0"
+)
+
+# --- CORS ---
+origins = [
+    "http://localhost:3000",                    # Frontend dev
+    "https://autodigitalservices.onrender.com" # Frontend prod
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # autorise GET, POST, OPTIONS, PUT, DELETE
+    allow_headers=["*"],  # autorise Content-Type, Authorization, etc.
+)
+# --- Authentification ---
+SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
+ALGORITHM = "HS256"
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 # --- IMPORTS PAYDUNYA ---
 import paydunya
 from paydunya import Invoice
@@ -48,35 +70,6 @@ logger = logging.getLogger(__name__)
 # --- Répertoire upload ---
 UPLOAD_DIR = Path("upload")
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-# --- App FastAPI ---
-app = FastAPI(
-    title="Assistant Dux Web",
-    description="API pour modifier des fichiers web avec l'IA",
-    version="1.0.0"
-)
-
-# --- CORS ---
-from fastapi.middleware.cors import CORSMiddleware
-
-
-origins = [
-    "http://localhost:3000",                    # Frontend dev
-    "https://autodigitalservices.onrender.com" # Frontend prod
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],  # autorise GET, POST, OPTIONS, PUT, DELETE
-    allow_headers=["*"],  # autorise Content-Type, Authorization, etc.
-)
-# --- Authentification ---
-SECRET_KEY = "votre-clé-secrète-ultra-sécurisée"  # ⚠️ Change ça avant prod
-ALGORITHM = "HS256"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
 
 # ============================================================
 #                        Modèles
@@ -159,17 +152,9 @@ class GenerationRequest(BaseModel):
 #               Connexion MongoDB (Startup/Shutdown)
 # ============================================================
 
-from motor.motor_asyncio import AsyncIOMotorClient
-import certifi
-import bcrypt
-import logging
-from fastapi import FastAPI
-import config  # ton fichier config.py avec Settings()
-import os
-from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
-app = FastAPI()
+# ANCIENNE LIGNE ERRONÉE : app = FastAPI()
 
 @app.on_event("startup")
 async def startup_db_client():
