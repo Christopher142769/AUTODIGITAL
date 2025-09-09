@@ -104,7 +104,7 @@ class PyObjectId(ObjectId):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v: Any) -> ObjectId:
+    def validate(cls, v: Any, info: Any = None) -> ObjectId:
         if isinstance(v, ObjectId):
             return v
         if not ObjectId.is_valid(v):
@@ -384,16 +384,39 @@ async def register(request: LoginRequest):
 async def login(request: LoginRequest):
     logger.info(f"Tentative de connexion pour l'utilisateur: {request.username}")
     user_in_db = await get_user_from_db(request.username)
-    if not user_in_db or not bcrypt.checkpw(request.password.encode('utf-8'), user_in_db.hashed_password.encode('utf-8')):
-        logger.warning(f"Échec de la connexion pour l'utilisateur: {request.username}")
+
+    if not user_in_db:
+        logger.warning(f"Utilisateur non trouvé: {request.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Nom d'utilisateur ou mot de passe incorrect."
+        )
+
+    try:
+        password_valid = bcrypt.checkpw(
+            request.password.encode('utf-8'),
+            user_in_db.hashed_password.encode('utf-8')
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification du mot de passe pour {request.username}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur interne du serveur lors de la vérification du mot de passe."
+        )
+
+    if not password_valid:
+        logger.warning(f"Mot de passe incorrect pour l'utilisateur: {request.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Nom d'utilisateur ou mot de passe incorrect."
         )
 
     access_token = create_access_token(
-        data={"sub": user_in_db.username}, expires_delta=timedelta(hours=24)
+        data={"sub": user_in_db.username},
+        expires_delta=timedelta(hours=24)
     )
+
+    logger.info(f"Connexion réussie pour l'utilisateur: {request.username}")
     return {"access_token": access_token, "token_type": "bearer", "role": user_in_db.role}
 
 @app.get("/user/me")
