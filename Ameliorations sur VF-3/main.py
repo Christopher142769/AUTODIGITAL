@@ -40,6 +40,7 @@ origins = [
     "https://autodigitalservices.onrender.com"
 ]
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
