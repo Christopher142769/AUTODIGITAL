@@ -510,16 +510,22 @@ async def serve_user_file(username: str, file_path: str):
     return FileResponse(full_path)
 
 # --- Endpoints Admin mis à jour ---
+# main.py
+
 @app.get("/admin/users")
 async def get_all_users(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         users = []
         async for user_data in app.database[USERS_COLLECTION_NAME].find():
+            # Convertir ObjectId en chaîne de caractères pour la sérialisation JSON
+            user_data["_id"] = str(user_data["_id"])
             user_data.pop('hashed_password', None)
             users.append(user_data)
+        
         return {"users": users}
     except Exception as e:
         logger.error(f"Erreur de lecture de la base de données des utilisateurs: {e}")
+        # La HTTPException est un bon moyen de gérer les erreurs inattendues
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
         
 @app.post("/admin/update-subscription")
