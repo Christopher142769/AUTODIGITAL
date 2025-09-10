@@ -80,6 +80,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # Définition des noms de collections
 USERS_COLLECTION_NAME = "users"
 NOTIFICATIONS_COLLECTION_NAME = "notifications"
+GENERATIONS_COLLECTION_NAME = "generations" # NOUVEAU
 
 # ============================================================
 #                        Modèles
@@ -94,7 +95,7 @@ class PaymentRequest(BaseModel):
     amount: int
     return_url: str
     callback_url: str
-    months: int  # <-- NOUVEAU CHAMP
+    months: int
 
 class PayDunyaCallback(BaseModel):
     token: str
@@ -229,7 +230,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=24) # Correction: 30 minutes est trop court pour un token
+        expire = datetime.utcnow() + timedelta(hours=24)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -286,7 +287,7 @@ async def create_payment_invoice(request: PaymentRequest, current_user: UserInDB
         )
         invoice.add_custom_data("username", current_user.username)
         invoice.add_custom_data("plan", request.plan)
-        invoice.add_custom_data("months", request.months) # <-- MODIFICATION APPORTÉE ICI
+        invoice.add_custom_data("months", request.months)
 
         invoice.set_total_price(request.amount)
         invoice.set_cancel_url(request.return_url)
@@ -439,6 +440,15 @@ async def generate_template(request: GenerationRequest, current_user: UserInDB =
                 )
                 current_user.trials_left -= 1
             
+            # --- MODIFICATION: Enregistrer la génération dans la base de données ---
+            generation_data = {
+                "username": current_user.username,
+                "timestamp": datetime.now(),
+                "user_query": request.user_query,
+                "file_path": request.file_path
+            }
+            await app.database[GENERATIONS_COLLECTION_NAME].insert_one(generation_data)
+
             full_code = modification_result.get("code_applied", "")
             match = CODE_PATTERN.search(full_code)
             clean_code = match.group(1).strip() if match else full_code
@@ -693,30 +703,29 @@ async def demote_admin_to_user(request: ManageAdmin, current_admin: UserInDB = D
         logger.error(f"Erreur lors de la rétrogradation de l'administrateur: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur.")
         
-# --- Nouveau endpoint pour les statistiques de l'administrateur ---
+# --- MODIFICATION: Nouveau endpoint pour les statistiques de l'administrateur basé sur la DB ---
 @app.get("/admin/stats")
 async def get_admin_stats(current_admin: UserInDB = Depends(get_current_admin_user)):
     try:
         # 1. Nombre total d'utilisateurs
         total_users = await app.database[USERS_COLLECTION_NAME].count_documents({})
         
-        # 2. Top 5 des utilisateurs les plus actifs
-        user_generations = {}
-        for user_folder in UPLOAD_DIR.iterdir():
-            if user_folder.is_dir():
-                username = user_folder.name
-                # Compter le nombre de fichiers (générations) dans le dossier de l'utilisateur
-                generations_count = len(list(user_folder.glob("*.html")))
-                user_generations[username] = generations_count
-        
-        # Trier par nombre de générations décroissant et prendre le top 5
-        top_users = sorted(user_generations.items(), key=lambda item: item[1], reverse=True)[:5]
-        
-        # Convertir en un format facile à utiliser pour le frontend
-        top_users_data = [{"username": user, "generations": count} for user, count in top_users]
+        # 2. Nombre total de générations (à partir de la DB)
+        total_generations = await app.database[GENERATIONS_COLLECTION_NAME].count_documents({})
 
+        # 3. Top 5 des utilisateurs les plus actifs (à partir de la DB)
+        pipeline = [
+            {"$group": {"_id": "$username", "generations_count": {"$sum": 1}}},
+            {"$sort": {"generations_count": -1}},
+            {"$limit": 5}
+        ]
+        top_users_data = []
+        async for doc in app.database[GENERATIONS_COLLECTION_NAME].aggregate(pipeline):
+            top_users_data.append({"username": doc["_id"], "generations": doc["generations_count"]})
+        
         return {
             "total_users": total_users,
+            "total_generations": total_generations,
             "top_users": top_users_data,
         }
         
