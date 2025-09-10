@@ -580,3 +580,163 @@ body {
   align-items: center; /* Aligne les boutons verticalement */
   justify-content: center; /* Centre les boutons horizontalement */
 }
+/* --- AdminDashboard.css --- */
+
+/* Styles existants... (Gardez tout ce qui est déjà là) */
+
+/* Nouveaux styles pour le formulaire de profil futuriste */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  color: #00f0ff; /* Bleu cyan futuriste */
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-group input {
+  background: rgba(0, 240, 255, 0.05); /* Fond transparent avec une touche de bleu */
+  border: 1px solid #00f0ff;
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  font-size: 1rem;
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #ff00ff; /* Effet de focus magenta */
+  box-shadow: 0 0 10px #ff00ff, 0 0 20px rgba(255, 0, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.save-profile-btn {
+  background: linear-gradient(45deg, #00f0ff, #ff00ff);
+  color: white;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.save-profile-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 0 20px #ff00ff, 0 0 30px rgba(255, 0, 255, 0.7);
+}
+
+/* Styles et animations pour le changement de mot de passe */
+.password-container {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.2);
+}
+
+.change-password-trigger {
+  color: #00f0ff;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: color 0.3s ease-in-out;
+}
+
+.change-password-trigger:hover {
+  color: #ff00ff;
+}
+
+.password-input-wrapper {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s ease-in-out;
+}
+
+.password-container .active + .password-input-wrapper {
+  max-height: 100px; /* Ajustez cette valeur si besoin */
+}
+
+.password-input-wrapper .form-group {
+  padding-top: 15px;
+}
+
+/* Animations de fond pour un effet futuriste */
+body {
+  /* ... vos styles de fond existants ... */
+  background: #1a1a2e;
+  overflow-x: hidden;
+}
+
+.dashboard-content::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at top left, rgba(0, 240, 255, 0.1), transparent 40%),
+              radial-gradient(circle at bottom right, rgba(255, 0, 255, 0.1), transparent 40%);
+  z-index: -1;
+  animation: pulse-bg 15s infinite alternate;
+}
+
+@keyframes pulse-bg {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+/* Effet de scanline sur les cartes */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: scanline 5s infinite linear;
+}
+
+@keyframes scanline {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 100%;
+  }
+}

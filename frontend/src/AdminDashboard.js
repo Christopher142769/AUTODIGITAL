@@ -10,9 +10,10 @@ import {
   FaTimes,
   FaBars,
   FaBell,
-  FaTrashAlt // 🗑️ Ajout de l'icône de la corbeille
+  FaTrashAlt,
+  FaUserCog, // ⚙️ Ajout de l'icône pour les paramètres du compte
+  FaKey // 🔑 Ajout de l'icône de la clé pour le mot de passe
 } from 'react-icons/fa';
-// Importations de Recharts
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './AdminDashboard.css';
 
@@ -37,7 +38,7 @@ api.interceptors.request.use(
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [stats, setStats] = useState({ total_users: 0, top_users: [] });
+  const [stats, setStats] = useState({ total_users: 0, total_generations: 0, top_users: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -45,10 +46,16 @@ const AdminDashboard = ({ setAuthToken }) => {
   const [activeSection, setActiveSection] = useState('users');
   const navigate = useNavigate();
 
+  // Nouveaux états pour la gestion du profil admin
+  const [profileFormData, setProfileFormData] = useState({ new_username: '', new_password: '' });
+  const [currentUsername, setCurrentUsername] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false); // Ajout d'un état pour le changement de mot de passe
+
   useEffect(() => {
     fetchUsers();
     fetchNotifications();
     fetchStats();
+    fetchCurrentUser();
     const notificationInterval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(notificationInterval);
   }, []);
@@ -64,11 +71,21 @@ const AdminDashboard = ({ setAuthToken }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await api.get('/user/me');
+      setCurrentUsername(response.data.username);
+      setProfileFormData({ ...profileFormData, new_username: response.data.username });
+    } catch (err) {
+      console.error('Erreur lors de la récupération des informations de l\'utilisateur courant:', err);
+    }
+  };
+
   const fetchUsers = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get('/admin/users'); // Changé axios.get en api.get
+      const response = await api.get('/admin/users');
       setUsers(response.data.users);
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de la récupération des utilisateurs.');
@@ -79,7 +96,7 @@ const AdminDashboard = ({ setAuthToken }) => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await api.get('/admin/notifications'); // Changé axios.get en api.get
+      const response = await api.get('/admin/notifications');
       setNotifications(response.data.notifications);
     } catch (err) {
       console.error('Erreur lors de la récupération des notifications:', err);
@@ -89,7 +106,7 @@ const AdminDashboard = ({ setAuthToken }) => {
   const fetchStats = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/admin/stats'); // Changé axios.get en api.get
+      const response = await api.get('/admin/stats');
       setStats(response.data);
     } catch (err) {
       console.error('Erreur lors de la récupération des statistiques:', err);
@@ -102,7 +119,7 @@ const AdminDashboard = ({ setAuthToken }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await api.post('/admin/update-subscription', { username, months }); // Changé axios.post en api.post
+      await api.post('/admin/update-subscription', { username, months });
       alert(`Abonnement de ${months} mois accordé à ${username}!`);
       setSelectedUser(null);
       fetchUsers();
@@ -113,20 +130,48 @@ const AdminDashboard = ({ setAuthToken }) => {
     }
   };
 
-  // 🗑️ Nouvelle fonction pour supprimer un utilisateur
   const handleDeleteUser = async (username) => {
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur '${username}' ? Cette action est irréversible.`)) {
       setIsLoading(true);
       setError(null);
       try {
-        await api.delete(`/admin/users/${username}`); // Changé axios.delete en api.delete
+        await api.delete(`/admin/users/${username}`);
         alert(`L'utilisateur '${username}' a été supprimé avec succès.`);
-        fetchUsers(); // Actualiser la liste après la suppression
+        fetchUsers();
       } catch (err) {
         setError(err.response?.data?.detail || 'Erreur lors de la suppression de l\'utilisateur.');
       } finally {
         setIsLoading(false);
       }
+    }
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    try {
+      const updateData = {};
+      if (profileFormData.new_username && profileFormData.new_username !== currentUsername) {
+        updateData.new_username = profileFormData.new_username;
+      }
+      if (profileFormData.new_password) {
+        updateData.new_password = profileFormData.new_password;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        alert("Aucun changement détecté.");
+        setIsLoading(false);
+        return;
+      }
+
+      await api.put('/admin/profile', updateData);
+      alert('Profil mis à jour avec succès ! Veuillez vous reconnecter.');
+      handleLogout();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de la mise à jour du profil.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -259,8 +304,8 @@ const AdminDashboard = ({ setAuthToken }) => {
                 <p className="stat-value">{stats.total_users}</p>
               </div>
               <div className="stat-item">
-                <p className="stat-label">Générations</p>
-                <p className="stat-value">{stats.top_users.reduce((sum, user) => sum + user.generations, 0)}</p>
+                <p className="stat-label">Total Générations</p>
+                <p className="stat-value">{stats.total_generations}</p>
               </div>
             </div>
             <div className="chart-container">
@@ -278,6 +323,53 @@ const AdminDashboard = ({ setAuthToken }) => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        )}
+
+        {/* --- NOUVEAU CONTENU DE LA SECTION PARAMÈTRES --- */}
+        {activeSection === 'settings' && (
+          <div className="card settings-card">
+            <h2 className="neon-subtitle">⚙️ Paramètres du compte Administrateur</h2>
+            <form onSubmit={handleUpdateProfile} className="profile-form">
+              <div className="form-group">
+                <label htmlFor="username"><FaUserCog /> Nom d'utilisateur</label>
+                <input
+                  type="text"
+                  id="username"
+                  value={profileFormData.new_username}
+                  onChange={(e) => setProfileFormData({ ...profileFormData, new_username: e.target.value })}
+                  placeholder="Nouveau nom d'utilisateur"
+                />
+              </div>
+
+              {/* Conteneur du mot de passe avec animation */}
+              <div className="password-container">
+                <div 
+                  className={`change-password-trigger ${isChangingPassword ? 'active' : ''}`}
+                  onClick={() => setIsChangingPassword(!isChangingPassword)}
+                >
+                  <FaKey /> Changer le mot de passe
+                </div>
+                {isChangingPassword && (
+                  <div className="password-input-wrapper">
+                    <div className="form-group">
+                      <label htmlFor="password">Nouveau mot de passe</label>
+                      <input
+                        type="password"
+                        id="password"
+                        value={profileFormData.new_password}
+                        onChange={(e) => setProfileFormData({ ...profileFormData, new_password: e.target.value })}
+                        placeholder="Nouveau mot de passe"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button type="submit" className="save-profile-btn" disabled={isLoading}>
+                {isLoading ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
+              </button>
+            </form>
           </div>
         )}
       </main>
