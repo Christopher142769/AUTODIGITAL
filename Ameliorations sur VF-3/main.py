@@ -80,7 +80,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # Définition des noms de collections
 USERS_COLLECTION_NAME = "users"
 NOTIFICATIONS_COLLECTION_NAME = "notifications"
-GENERATIONS_COLLECTION_NAME = "generations" # NOUVEAU
+GENERATIONS_COLLECTION_NAME = "generations" 
 
 # ============================================================
 #                        Modèles
