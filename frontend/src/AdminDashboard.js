@@ -9,11 +9,30 @@ import {
   FaSignOutAlt,
   FaTimes,
   FaBars,
-  FaBell
+  FaBell,
+  FaTrashAlt // 🗑️ Ajout de l'icône de la corbeille
 } from 'react-icons/fa';
 // Importations de Recharts
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './AdminDashboard.css';
+
+// --- Configuration d'Axios pour l'authentification ---
+const api = axios.create({
+  baseURL: 'https://autodigital.onrender.com'
+});
+
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 const AdminDashboard = ({ setAuthToken }) => {
   const [users, setUsers] = useState([]);
@@ -29,7 +48,7 @@ const AdminDashboard = ({ setAuthToken }) => {
   useEffect(() => {
     fetchUsers();
     fetchNotifications();
-    fetchStats(); // ⭐ AJOUTEZ CETTE LIGNE
+    fetchStats();
     const notificationInterval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(notificationInterval);
   }, []);
@@ -49,7 +68,7 @@ const AdminDashboard = ({ setAuthToken }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await axios.get('https://autodigital.onrender.com/admin/users');
+      const response = await api.get('/admin/users'); // Changé axios.get en api.get
       setUsers(response.data.users);
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de la récupération des utilisateurs.');
@@ -60,10 +79,22 @@ const AdminDashboard = ({ setAuthToken }) => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await axios.get('https://autodigital.onrender.com/admin/notifications');
+      const response = await api.get('/admin/notifications'); // Changé axios.get en api.get
       setNotifications(response.data.notifications);
     } catch (err) {
       console.error('Erreur lors de la récupération des notifications:', err);
+    }
+  };
+
+  const fetchStats = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/admin/stats'); // Changé axios.get en api.get
+      setStats(response.data);
+    } catch (err) {
+      console.error('Erreur lors de la récupération des statistiques:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -71,7 +102,7 @@ const AdminDashboard = ({ setAuthToken }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await axios.post('https://autodigital.onrender.com/admin/update-subscription', { username, months });
+      await api.post('/admin/update-subscription', { username, months }); // Changé axios.post en api.post
       alert(`Abonnement de ${months} mois accordé à ${username}!`);
       setSelectedUser(null);
       fetchUsers();
@@ -79,6 +110,23 @@ const AdminDashboard = ({ setAuthToken }) => {
       setError(err.response?.data?.detail || 'Erreur lors de l\'attribution de l\'abonnement.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 🗑️ Nouvelle fonction pour supprimer un utilisateur
+  const handleDeleteUser = async (username) => {
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur '${username}' ? Cette action est irréversible.`)) {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await api.delete(`/admin/users/${username}`); // Changé axios.delete en api.delete
+        alert(`L'utilisateur '${username}' a été supprimé avec succès.`);
+        fetchUsers(); // Actualiser la liste après la suppression
+      } catch (err) {
+        setError(err.response?.data?.detail || 'Erreur lors de la suppression de l\'utilisateur.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
   
@@ -91,19 +139,7 @@ const AdminDashboard = ({ setAuthToken }) => {
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
-
-  const fetchStats = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get('https://autodigital.onrender.com/admin/stats');
-      setStats(response.data);
-    } catch (err) {
-      console.error('Erreur lors de la récupération des statistiques:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  
   return (
     <div className="admin-container">
       {/* Bouton de bascule mobile */}
@@ -174,13 +210,22 @@ const AdminDashboard = ({ setAuthToken }) => {
                     <td data-label="Rôle"><span className={`role-badge ${user.role}`}>{user.role}</span></td>
                     <td data-label="Essais Restants">{user.trials_left === -1 ? 'Illimité' : user.trials_left}</td>
                     <td data-label="Abonnement">{user.subscription_end ? new Date(user.subscription_end).toLocaleDateString() : 'Aucun'}</td>
-                    <td data-label="Actions">
-                      {user.role === 'user' && (
-                        <button className="grant-btn" onClick={() => setSelectedUser(user)}>
-                          ⚡ Accorder
-                        </button>
-                      )}
-                    </td>
+                    <td data-label="Actions" className="actions-cell">
+  <div className="button-group">
+    {user.role === 'user' && (
+      <button className="grant-btn" onClick={() => setSelectedUser(user)}>
+        ⚡ Accorder
+      </button>
+    )}
+    <button 
+      className="delete-btn-futuristic" 
+      onClick={() => handleDeleteUser(user.username)}
+      disabled={user.username === 'admin'}
+    >
+      <FaTrashAlt style={{ marginRight: '5px' }} />
+    </button>
+  </div>
+</td>
                   </tr>
                 ))}
               </tbody>
@@ -235,7 +280,6 @@ const AdminDashboard = ({ setAuthToken }) => {
             </div>
           </div>
         )}
-        {/* Ajoutez d'autres sections ici (statistiques, paramètres, etc.) */}
       </main>
 
       {/* Modal */}

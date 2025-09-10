@@ -531,3 +531,52 @@ body {
   color: #00f0ff !important;
   font-weight: bold;
 }
+/* Bouton de suppression futuriste */
+.delete-btn-futuristic {
+  background: linear-gradient(45deg, #ff007f, #00f0ff);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f, 0 0 15px #00f0ff;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(255, 0, 127, 0.5);
+}
+
+.delete-btn-futuristic:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.8), 0 0 30px rgba(255, 0, 127, 0.8);
+}
+
+.delete-btn-futuristic::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.5s ease;
+  transform: skewX(-20deg);
+}
+
+.delete-btn-futuristic:hover::before {
+  left: 100%;
+}
+/* Style pour la cellule du tableau contenant les actions */
+.actions-cell {
+  white-space: nowrap; /* Empêche les boutons de passer à la ligne */
+}
+
+/* Conteneur pour grouper et espacer les boutons */
+.button-group {
+  display: flex;
+  gap: 10px; /* Ajoute un espace de 10px entre les boutons */
+  align-items: center; /* Aligne les boutons verticalement */
+  justify-content: center; /* Centre les boutons horizontalement */
+}

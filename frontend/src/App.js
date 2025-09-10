@@ -101,13 +101,14 @@ function App({ authToken, setAuthToken }) {
   };
 
   // Nouvelle fonction pour gérer le paiement d'abonnement
-  const handleSubscriptionPayment = async (plan, amount) => {
+  const handleSubscriptionPayment = async (plan, amount, months) => {
     setIsLoading(true);
     setError(null);
     try {
       const response = await axios.post('https://autodigital.onrender.com/create-payment-invoice', {
         plan,
         amount,
+        months, // <-- MODIFICATION APPORTÉE ICI
         callback_url: 'https://autodigital.onrender.com/payment-callback',
         return_url: window.location.href,
       });
@@ -361,29 +362,90 @@ function App({ authToken, setAuthToken }) {
             <div className="modal-body payment-options">
               <p>Vous avez utilisé vos 3 essais. Choisissez un abonnement pour continuer à générer des sites web.</p>
               
-              <div className="subscription-card">
-                <h4>Abonnement 1 mois</h4>
-                <p>Accès illimité aux fonctionnalités de génération de site.</p>
-                <span className="price">9.99 €</span>
-                <button
-                  className="btn btn-primary w-100"
-                  onClick={() => handleSubscriptionPayment('1_month', 9.99)}
-                >
-                  Payer avec PayDunya
-                </button>
+              <div className="subscription-group">
+                <h4 className="group-title">Plans Simples</h4>
+                {/* Plan Mensuel */}
+                <div className="subscription-card">
+                  <h4>Plan Mensuel</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Basique</p>
+                  <span className="price">9 500 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Mensuel', 9500, 1)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
+                
+                {/* Plan Trimestriel */}
+                <div className="subscription-card">
+                  <h4>Plan Trimestriel</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Basique</p>
+                  <span className="price">25 000 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Trimestriel', 25000, 3)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
+
+                {/* Plan Annuel */}
+                <div className="subscription-card">
+                  <h4>Plan Annuel</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Basique</p>
+                  <span className="price">89 000 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Annuel', 89000, 12)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
               </div>
-              
-              <div className="subscription-card">
-                <h4>Abonnement 6 mois</h4>
-                <p>Économisez 20% en choisissant le plan 6 mois.</p>
-                <span className="price">47.99 €</span>
-                <button
-                  className="btn btn-primary w-100"
-                  onClick={() => handleSubscriptionPayment('6_months', 47.99)}
-                >
-                  Payer avec PayDunya
-                </button>
+
+              <div className="subscription-group">
+                <h4 className="group-title">Plans Boostés</h4>
+                {/* Plan Mensuel + Boost */}
+                <div className="subscription-card">
+                  <h4>Plan Mensuel + Boost</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Premium<br />Campagne Publicitaire ciblée via IA</p>
+                  <span className="price">19 500 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Mensuel + Boost', 19500, 1)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
+
+                {/* Plan Trimestriel + Boost */}
+                <div className="subscription-card">
+                  <h4>Plan Trimestriel + Boost</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Premium<br />Campagne Publicitaire ciblée via IA</p>
+                  <span className="price">49 500 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Trimestriel + Boost', 49500, 3)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
+
+                {/* Plan Annuel + Boost */}
+                <div className="subscription-card">
+                  <h4>Plan Annuel + Boost</h4>
+                  <p>Assistance IA 24/7<br />Hébergement Premium<br />Campagne Publicitaire ciblée via IA</p>
+                  <span className="price">149 000 FCFA</span>
+                  <button
+                    className="btn btn-primary w-100"
+                    onClick={() => handleSubscriptionPayment('Plan Annuel + Boost', 149000, 12)} // <-- MODIFICATION APPORTÉE ICI
+                  >
+                    Payer avec PayDunya
+                  </button>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
