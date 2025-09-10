@@ -1,8 +1,161 @@
-import React, { useState, useEffect, useRef } from 'react';
+// App.js
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Stars, PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
 import './App.css';
 
+// Composant pour le corps humain d'IA "parlant"
+function AITalkingBody() {
+  const bodyRef = useRef();
+  const headRef = useRef();
+  const mouthRef = useRef();
+  const leftArmRef = useRef();
+  const rightArmRef = useRef();
+  const leftLegRef = useRef();
+  const rightLegRef = useRef();
+
+  useFrame(({ clock }) => {
+    const time = clock.getElapsedTime();
+    const runSpeed = 10;
+    const bodyShake = Math.sin(time * 20) * 0.05;
+
+    if (bodyRef.current) {
+      // Mouvement global du corps : course sur place
+      bodyRef.current.position.y = bodyShake;
+    }
+
+    if (headRef.current) {
+      // Secousse de la tête
+      headRef.current.rotation.y = Math.sin(time * 15) * 0.2;
+    }
+    
+    if (mouthRef.current) {
+      // Animation de la bouche pour simuler la parole (plus rapide)
+      const mouthScaleY = 0.5 + Math.sin(time * 30) * 0.5;
+      mouthRef.current.scale.y = mouthScaleY;
+    }
+
+    // Animation des bras : mouvement de course exagéré
+    if (leftArmRef.current && rightArmRef.current) {
+      leftArmRef.current.rotation.x = Math.sin(time * runSpeed) * 0.8;
+      rightArmRef.current.rotation.x = Math.sin(time * runSpeed + Math.PI) * 0.8;
+    }
+    
+    // Animation des jambes : mouvement de course
+    if (leftLegRef.current && rightLegRef.current) {
+      leftLegRef.current.rotation.x = Math.sin(time * runSpeed + Math.PI) * 0.8;
+      rightLegRef.current.rotation.x = Math.sin(time * runSpeed) * 0.8;
+    }
+  });
+
+  const material = new THREE.MeshStandardMaterial({
+    color: "#00ffff",
+    emissive: "#00ffff",
+    emissiveIntensity: 2,
+    metalness: 0.8,
+    roughness: 0.2,
+    transparent: true,
+    opacity: 0.3,
+    wireframe: true,
+  });
+
+  const mouthMaterial = new THREE.MeshStandardMaterial({
+    color: "#ff00ff",
+    emissive: "#ff00ff",
+    emissiveIntensity: 2,
+    metalness: 0.8,
+    roughness: 0.2,
+    transparent: true,
+    opacity: 0.3,
+    wireframe: true,
+  });
+
+  return (
+    <group ref={bodyRef} position={[0, -1, 0]} scale={[0.2, 0.2, 0.2]} rotation={[0, -Math.PI / 2, 0]}>
+      {/* Torse */}
+      <mesh material={material}>
+        <boxGeometry args={[1.5, 2, 0.5]} />
+        <torusKnotGeometry args={[0.8, 0.1, 100, 16]} />
+      </mesh>
+      
+      {/* Tête */}
+      <group ref={headRef} position={[0, 1.5, 0]}>
+        <mesh material={material}>
+          <sphereGeometry args={[0.7, 32, 32]} />
+        </mesh>
+        
+        {/* La "bouche" de l'IA */}
+        <mesh material={mouthMaterial} ref={mouthRef} position={[0, -0.4, 0.7]}>
+          <boxGeometry args={[0.4, 0.1, 0.1]} />
+        </mesh>
+      </group>
+
+      {/* Bras Gauche */}
+      <group ref={leftArmRef} position={[-1, 0.5, 0]}>
+        <mesh material={material} position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+        <mesh material={material} position={[0, -0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+      </group>
+      
+      {/* Bras Droit */}
+      <group ref={rightArmRef} position={[1, 0.5, 0]}>
+        <mesh material={material} position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+        <mesh material={material} position={[0, -0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+      </group>
+
+      {/* Jambe Gauche */}
+      <group ref={leftLegRef} position={[-0.4, -1.5, 0]}>
+        <mesh material={material} position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+        <mesh material={material} position={[0, -0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+      </group>
+      
+      {/* Jambe Droite */}
+      <group ref={rightLegRef} position={[0.4, -1.5, 0]}>
+        <mesh material={material} position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+        <mesh material={material} position={[0, -0.5, 0]}>
+          <boxGeometry args={[0.5, 0.75, 0.5]} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+// Loader 3D
+function Loading3D() {
+  return (
+    <div className="loading-3d-container">
+      <Canvas camera={{ position: [0, 0, 7], fov: 50 }}>
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} intensity={2} color="#00ffcc" />
+        <pointLight position={[-10, -10, -10]} intensity={2} color="#ff00ff" />
+        <PerspectiveCamera makeDefault position={[0, 0, 3]} />
+        <Stars radius={50} depth={50} count={5000} factor={4} fade />
+        <Suspense fallback={null}>
+          <AITalkingBody /> {/* Remplacer le composant */}
+        </Suspense>
+      </Canvas>
+      <p className="loading-text neon-glow">AUTODIGITAL crée la magie…</p>
+    </div>
+  );
+}
+
+// Composant principal de l'application (inchangé)
 function App({ authToken, setAuthToken }) {
   const [userQuery, setUserQuery] = useState('');
   const [fileName, setFileName] = useState('');
@@ -10,7 +163,7 @@ function App({ authToken, setAuthToken }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false); // Nouveau state pour la modale de paiement
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [modificationQuery, setModificationQuery] = useState('');
   const [files, setFiles] = useState([]);
   const [trialsLeft, setTrialsLeft] = useState(3);
@@ -68,7 +221,7 @@ function App({ authToken, setAuthToken }) {
 
   const handleSubmit = async (queryToUse, fileToUse) => {
     if (trialsLeft === 0) {
-      setIsPaymentModalOpen(true); // Ouvre la nouvelle modale de paiement
+      setIsPaymentModalOpen(true);
       return;
     }
 
@@ -93,14 +246,13 @@ function App({ authToken, setAuthToken }) {
         setError(response.data.message);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || "Erreur de communication avec le backend. Assurez-vous qu'il est en cours d'exécution.");
+      setError(err.response?.data?.detail || "Erreur de communication avec le backend.");
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Nouvelle fonction pour gérer le paiement d'abonnement
   const handleSubscriptionPayment = async (plan, amount, months) => {
     setIsLoading(true);
     setError(null);
@@ -108,13 +260,13 @@ function App({ authToken, setAuthToken }) {
       const response = await axios.post('https://autodigital.onrender.com/create-payment-invoice', {
         plan,
         amount,
-        months, // <-- MODIFICATION APPORTÉE ICI
+        months,
         callback_url: 'https://autodigital.onrender.com/payment-callback',
         return_url: window.location.href,
       });
 
       if (response.data.success) {
-        window.location.href = response.data.invoice_url; // Redirige vers la page de paiement PayDunya
+        window.location.href = response.data.invoice_url;
       } else {
         setError('Erreur lors de la création de la facture de paiement.');
       }
@@ -361,7 +513,7 @@ function App({ authToken, setAuthToken }) {
             </div>
             <div className="modal-body payment-options">
               <p>Vous avez utilisé vos 3 essais. Choisissez un abonnement pour continuer à générer des sites web.</p>
-              
+
               <div className="subscription-group">
                 <h4 className="group-title">Plans Simples</h4>
                 {/* Plan Mensuel */}
@@ -371,12 +523,12 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">9 500 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Mensuel', 9500, 1)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Mensuel', 9500, 1)}
                   >
                     Payer avec PayDunya
                   </button>
                 </div>
-                
+
                 {/* Plan Trimestriel */}
                 <div className="subscription-card">
                   <h4>Plan Trimestriel</h4>
@@ -384,7 +536,7 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">25 000 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Trimestriel', 25000, 3)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Trimestriel', 25000, 3)}
                   >
                     Payer avec PayDunya
                   </button>
@@ -397,7 +549,7 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">89 000 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Annuel', 89000, 12)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Annuel', 89000, 12)}
                   >
                     Payer avec PayDunya
                   </button>
@@ -413,7 +565,7 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">19 500 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Mensuel + Boost', 19500, 1)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Mensuel + Boost', 19500, 1)}
                   >
                     Payer avec PayDunya
                   </button>
@@ -426,7 +578,7 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">49 500 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Trimestriel + Boost', 49500, 3)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Trimestriel + Boost', 49500, 3)}
                   >
                     Payer avec PayDunya
                   </button>
@@ -439,7 +591,7 @@ function App({ authToken, setAuthToken }) {
                   <span className="price">149 000 FCFA</span>
                   <button
                     className="btn btn-primary w-100"
-                    onClick={() => handleSubscriptionPayment('Plan Annuel + Boost', 149000, 12)} // <-- MODIFICATION APPORTÉE ICI
+                    onClick={() => handleSubscriptionPayment('Plan Annuel + Boost', 149000, 12)}
                   >
                     Payer avec PayDunya
                   </button>
@@ -454,11 +606,7 @@ function App({ authToken, setAuthToken }) {
       {/* Loading overlay */}
       {isLoading && (
         <div className="loading-overlay" aria-live="polite">
-          <div className="loader">
-            <div className="orbit"></div>
-            <div className="sat"></div>
-            <span className="loader-text">AUTODIGITAL crée la magie…</span>
-          </div>
+          <Loading3D />
         </div>
       )}
     </div>

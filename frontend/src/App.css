@@ -371,3 +371,103 @@ body {
     padding: 2rem;
   }
 }
+/* ------------------------------------------- */
+/* --- Styles pour l'overlay de chargement --- */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* --- Styles pour l'overlay de chargement --- */
+/* ------------------------------------------- */
+
+/* ------------------------------------------- */
+/* --- Styles pour l'overlay de chargement --- */
+/* ------------------------------------------- */
+
+/* ------------------------------------------- */
+/* --- Styles pour l'overlay de chargement --- */
+/* ------------------------------------------- */
+
+/* L'overlay global qui couvre tout l'écran */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(10, 10, 51, 0.85); /* Fond bleu foncé électrique et semi-transparent */
+  backdrop-filter: blur(10px); /* L'effet de flou sur le contenu derrière */
+  -webkit-backdrop-filter: blur(10px); /* Compatibilité Safari */
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Le conteneur du Canvas 3D (sans fond ni bordure) */
+.loading-3d-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Assurez-vous que le canvas prend bien toute la place pour l'effet */
+.loading-3d-container > canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Le texte de chargement qui brille */
+.loading-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6em;
+  font-weight: bold;
+  /* La valeur négative rapproche le texte de l'objet */
+  margin-top: -13rem; 
+  text-align: center;
+  color: #33d6ff;
+  text-shadow:
+    0 0 5px #33d6ff,
+    0 0 10px #33d6ff,
+    0 0 20px #33d6ff,
+    0 0 30px #33d6ff;
+  letter-spacing: 2px;
+  animation: pulse 2s infinite, neonGlow 1.5s ease-in-out infinite alternate;
+}
+
+/* --- Animations --- */
+
+/* Animation de fondu pour l'overlay */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Animation de pulsation douce pour le texte */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Animation de lueur du texte (plus subtile) */
+@keyframes neonGlow {
+  from { text-shadow: 0 0 5px #33d6ff, 0 0 10px #33d6ff, 0 0 20px #33d6ff; }
+  to { text-shadow: 0 0 10px #33d6ff, 0 0 20px #33d6ff, 0 0 40px #33d6ff; }
+}
+
+/* -------------------------------------- */
+/* --- Adaptation Mobile (Responsive) --- */
+/* -------------------------------------- */
+
+/* Optimisation pour les petits écrans */
+@media (max-width: 768px) {
+  .loading-text {
+    font-size: 1.2rem; /* Réduire la taille de la police */
+    text-align: center; /* Centrer le texte pour éviter le dépassement */
+    padding: 0 1rem;
+  }
+}
